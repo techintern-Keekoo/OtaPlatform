@@ -47,6 +47,14 @@ class MissingElement:
         raise TimeoutError("not found")
 
 
+class FakeMouse:
+    def __init__(self):
+        self.wheel_calls = 0
+
+    def wheel(self, dx, dy):
+        self.wheel_calls += 1
+
+
 class FakePage:
     def __init__(self, elements=None, url="about:blank", redirect_to=None):
         self.elements = elements or {}
@@ -56,6 +64,10 @@ class FakePage:
         self.screenshots = []
         self.closed = False
         self.handlers = {}
+        self.mouse = FakeMouse()
+
+    def wait_for_timeout(self, ms):
+        pass
 
     def on(self, event, handler):
         self.handlers[event] = handler

@@ -17,6 +17,8 @@ class GenericCollector(Collector):
     def quick_scan(self, page: SafePage, stay: Stay) -> dict[str, Decimal]:
         page.goto(self.site.search_url_for(stay))
         self.check_blocked(page)
+        if self.site.scroll_to_load:
+            page.scroll_through()
         prices = {}
         for room_id, room in self.site.rooms.items():
             text = page.read_text(room.search_price)
@@ -31,6 +33,8 @@ class GenericCollector(Collector):
         fields = room.summary
         page.goto(self.site.search_url_for(stay))
         self.check_blocked(page)
+        if self.site.scroll_to_load:
+            page.scroll_through()
         login_state = self.login_state(page)
         for step in room.steps:
             page.click_step(step)

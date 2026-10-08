@@ -98,6 +98,8 @@ def check_site(cfg, site_key: str, days: int = 14, use_profile: bool = False) ->
             self_check(context.guard)
             page = context.new_safe_page(site)
             page.goto(site.search_url_for(stay))
+            if site.scroll_to_load:
+                page.scroll_through()  # lazy-loaded room lists only appear after scrolling
             first = next((candidate(r.search_price) for r in site.rooms.values() if candidate(r.search_price)), None)
             if first:
                 try:

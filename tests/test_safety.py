@@ -307,3 +307,9 @@ def test_readonly_post_path_is_exact_and_still_body_checked():
     assert guard.block_reason("https://book.zenhotels.in/booking/multibox.php", "POST", "action=createBooking")
     # payment hosts are never exempt
     assert NetworkGuard((), (), ["/v1/payments"]).block_reason("https://api.razorpay.com/v1/payments", "POST")
+
+
+def test_scroll_through_only_uses_the_mouse_wheel(tmp_path):
+    fake = FakePage()
+    SafePage(fake, "agoda", ["agoda.com"], [], tmp_path).scroll_through(steps=3)
+    assert fake.mouse.wheel_calls == 3 and fake.visited == []

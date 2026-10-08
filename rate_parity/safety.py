@@ -182,6 +182,15 @@ class SafePage:
         self._page.wait_for_load_state("domcontentloaded", timeout=self._timeout_ms)
         check_url_allowed(self._page.url, self._domains)
 
+    def scroll_through(self, steps: int = 10, pause_ms: int = 600) -> None:
+        """Scroll down with the mouse wheel so lazy-loaded room lists appear.
+
+        Read-only: a wheel event cannot click, type or submit anything.
+        """
+        for _ in range(steps):
+            self._page.mouse.wheel(0, 1200)
+            self._page.wait_for_timeout(pause_ms)
+
     def close(self) -> None:
         self._page.close()
 

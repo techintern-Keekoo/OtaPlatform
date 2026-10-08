@@ -59,6 +59,7 @@ class Site:
     rooms: dict[str, SiteRoom]
     kind: str = "browser"  # "browser" (Playwright + selectors) or "ezee" (website search, no browser)
     ready: bool = True  # False: still has TODOs; reported as "not set up", never opened
+    scroll_to_load: bool = False  # scroll down after loading (room list loads lazily)
     ezee_hotel: str | None = None
 
     def search_url_for(self, stay: Stay) -> str:
@@ -245,6 +246,7 @@ def _site(key: str, data: dict, rooms: dict[str, RoomKey]) -> Site:
         login_wall_selectors=_strings(data, "login_wall_selectors", where),
         captcha_selectors=_strings(data, "captcha_selectors", where),
         block_texts=_strings(data, "block_texts", where),
+        scroll_to_load=_get(data, "scroll_to_load", where, bool, False),
         rooms=site_rooms,
     )
 

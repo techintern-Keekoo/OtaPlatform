@@ -190,3 +190,12 @@ def test_config_needs_final_or_price_and_taxes():
     raw["sites"]["booking_com"]["rooms"]["r1"]["summary"] = {**SUMMARY, "final": None, "gst": None}
     with pytest.raises(ConfigError, match="room_price and gst"):
         parse_config(raw)
+
+
+def test_scroll_to_load_scrolls_before_reading(tmp_path):
+    import dataclasses
+    site = dataclasses.replace(CFG.sites["booking_com"], scroll_to_load=True)
+    fake = FakePage({"#search-price": FakeElement("₹ 9,000"), "body": FakeElement("rooms")})
+    page = SafePage(fake, site.key, site.allowed_domains, site.step_selectors(), tmp_path)
+    assert GenericCollector(site).quick_scan(page, STAY) == {"r1": D("9000")}
+    assert fake.mouse.wheel_calls > 0

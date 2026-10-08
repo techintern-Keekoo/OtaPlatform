@@ -131,6 +131,7 @@ sites:
   booking_com:
     label: Booking.com
     enabled: true
+    scroll_to_load: true   # room list loads only after scrolling down
     allowed_domains: ["booking.com"]
     # From the property link; affiliate/session params (aid, label, sid, srpvid, blocks) removed.
     search_url: "https://www.booking.com/hotel/in/keekoo-manali-manali.html?checkin={checkin}&checkout={checkout}&group_adults={adults}&group_children=0&no_rooms=1&req_adults={adults}&req_children=0"
@@ -173,6 +174,7 @@ sites:
   makemytrip:
     label: MakeMyTrip
     enabled: true
+    scroll_to_load: true   # room list loads only after scrolling down
     allowed_domains: ["makemytrip.com"]
     # MMT dates are MMDDYYYY (11082026 = 8 Nov 2026). rsc = rooms e adults e children.
     search_url: "https://www.makemytrip.com/hotels/hotel-details/?hotelId=202004271355036572&_uCurrency=INR&checkin={checkin}&checkout={checkout}&city=CTKUU&country=IN&locusId=CTKUU&locusType=city&roomStayQualifier={adults}e0e&rsc=1e{adults}e0e"
@@ -208,6 +210,7 @@ sites:
   goibibo:
     label: Goibibo
     enabled: true
+    scroll_to_load: true   # room list loads only after scrolling down
     allowed_domains: ["goibibo.com"]
     # roomString = rooms-adults-children
     search_url: "https://www.goibibo.com/hotels/hotel-details/?checkin={checkin}&checkout={checkout}&roomString=1-{adults}-0&locusId=CTKUU&locusType=city&cityCode=CTKUU&cc=IN&_uCurrency=INR&giHotelId=2508145749391752109&mmtId=202004271355036572"
@@ -242,6 +245,7 @@ sites:
   agoda:
     label: Agoda
     enabled: true
+    scroll_to_load: true   # room list loads only after scrolling down
     allowed_domains: ["agoda.com"]
     # Agoda takes check-in + length of stay (los). los=1 matches stay.nights: 1;
     # change both together. finalPriceView=1 asks Agoda to show the total price.
@@ -282,6 +286,7 @@ sites:
   cleartrip:
     label: Cleartrip
     enabled: true
+    scroll_to_load: true   # room list loads only after scrolling down
     allowed_domains: ["cleartrip.com"]
     # c = checkin|checkout as DDMMYY ("|" is %7C), r = adults,children
     search_url: "https://www.cleartrip.com/hotels/details/zen-manali-by-keekoo-stays-4533148?c={checkin}%7C{checkout}&r={adults}%2C0"
