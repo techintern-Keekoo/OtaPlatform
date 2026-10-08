@@ -61,3 +61,61 @@ def test_csv_append_writes_header_once(tmp_path):
     assert lines[0] == ",".join(COLUMNS)
     assert len(lines) == 3
     assert "'=evil()" in lines[1]
+
+
+# --- reviewer fixes -------------------------------------------------------------
+
+def _raw_example():
+    import yaml
+    return yaml.safe_load(EXAMPLE.read_text(encoding="utf-8"))
+
+
+def test_malformed_site_is_a_config_error_not_a_crash():
+    from rate_parity.config import parse_config
+    raw = _raw_example()
+    raw["sites"]["makemytrip"] = "oops"
+    with pytest.raises(ConfigError):
+        parse_config(raw)
+
+
+@pytest.mark.parametrize("tolerance", [-1, True])
+def test_tolerance_must_be_a_non_negative_number(tolerance):
+    from rate_parity.config import parse_config
+    raw = _raw_example()
+    raw["tolerance_pct"] = tolerance
+    with pytest.raises(ConfigError, match="tolerance_pct"):
+        parse_config(raw, check_placeholders=False)
+
+
+def test_sheets_client_gets_a_timeout(monkeypatch):
+    from rate_parity.storage import sheets
+
+    class FakeWorksheet:
+        def row_values(self, n):
+            return ["ota"]
+
+        def append_rows(self, cells, value_input_option=None):
+            self.cells = cells
+
+    class FakeClient:
+        timeout = None
+
+        def set_timeout(self, seconds):
+            self.timeout = seconds
+
+        def open_by_key(self, key):
+            return self
+
+        def worksheet(self, title):
+            return FakeWorksheet()
+
+    client = FakeClient()
+    monkeypatch.setattr(sheets.gspread, "service_account", lambda filename: client)
+    sheets.append([["x"]], "sheet-id", "key.json", "checks")
+    assert client.timeout == sheets.TIMEOUT_SECONDS
+
+
+def test_gitignore_covers_secrets_and_evidence():
+    ignored = (EXAMPLE.parent / ".gitignore").read_text(encoding="utf-8").split()
+    for pattern in (".env", ".env.*", "config.yaml", "*.json", "*.pem", "chrome-profile/", "screenshots/", "output/"):
+        assert pattern in ignored

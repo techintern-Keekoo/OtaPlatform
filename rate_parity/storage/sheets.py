@@ -5,9 +5,12 @@ import gspread
 
 from ..models import COLUMNS
 
+TIMEOUT_SECONDS = 60  # never hang the daily run on a stuck Google API call
+
 
 def append(cells: list[list[str]], sheet_id: str, key_file: str, worksheet_title: str) -> None:
     client = gspread.service_account(filename=key_file)
+    client.set_timeout(TIMEOUT_SECONDS)
     sheet = client.open_by_key(sheet_id)
     try:
         worksheet = sheet.worksheet(worksheet_title)

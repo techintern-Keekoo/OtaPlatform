@@ -201,7 +201,11 @@ def _find_todos(value, path: str):
 
 def _check_placeholders(raw: dict) -> None:
     active = dict(raw)
-    active["sites"] = {k: v for k, v in raw.get("sites", {}).items() if v.get("enabled")}
+    sites = raw.get("sites")
+    if not isinstance(sites, dict):
+        raise ConfigError("config.sites must be a mapping")
+    # A malformed (non-mapping) site is kept so _site() reports it clearly later.
+    active["sites"] = {k: v for k, v in sites.items() if not isinstance(v, dict) or v.get("enabled")}
     todos = list(_find_todos(active, "config"))
     if todos:
         raise ConfigError("unfilled TODO placeholders: " + ", ".join(todos))
@@ -252,6 +256,10 @@ def parse_config(raw: dict, check_placeholders: bool = True) -> Config:
         delay_seconds=(float(delay[0]), float(delay[1])),
     )
 
+    tolerance = _get(raw, "tolerance_pct", "config", (int, float))
+    if isinstance(tolerance, bool) or tolerance < 0:
+        raise ConfigError("tolerance_pct must be a number >= 0")
+
     network = _get(raw, "network", "config", dict, {})
     commit = _strings(network, "commit_path_patterns", "network") or DEFAULT_COMMIT_PATH_PATTERNS
     output = _get(raw, "output", "config", dict, {})
@@ -259,7 +267,7 @@ def parse_config(raw: dict, check_placeholders: bool = True) -> Config:
 
     return Config(
         property_name=_get(_get(raw, "property", "config", dict), "name", "property", str),
-        tolerance_pct=Decimal(str(_get(raw, "tolerance_pct", "config", (int, float)))),
+        tolerance_pct=Decimal(str(tolerance)),
         stay=StayPlan(days, nights, adults),
         rooms=rooms,
         sites=sites,

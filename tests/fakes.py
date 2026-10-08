@@ -2,10 +2,18 @@
 
 
 class FakeElement:
-    def __init__(self, text="", attrs=None):
+    def __init__(self, text="", attrs=None, clickable_ancestor=None):
         self.text = text
         self.attrs = attrs or {}
+        self.clickable_ancestor = clickable_ancestor
         self.clicked = 0
+
+    def element_handle(self, timeout=None):
+        return self
+
+    def query_selector(self, selector):
+        assert selector.startswith("xpath=ancestor::")
+        return self.clickable_ancestor
 
     def inner_text(self, timeout=None):
         return self.text
@@ -47,9 +55,16 @@ class FakePage:
         self.visited = []
         self.screenshots = []
         self.closed = False
+        self.handlers = {}
+
+    def on(self, event, handler):
+        self.handlers[event] = handler
 
     def locator(self, selector):
         return FakeLocator(self.elements.get(selector))
+
+    def query_selector(self, selector):
+        return self.elements.get(selector)
 
     def goto(self, url, wait_until=None, timeout=None):
         self.visited.append(url)
@@ -66,14 +81,15 @@ class FakePage:
 
 
 class FakeRequest:
-    def __init__(self, url, method="GET"):
+    def __init__(self, url, method="GET", post_data=None):
         self.url = url
         self.method = method
+        self.post_data = post_data
 
 
 class FakeRoute:
-    def __init__(self, url, method="GET"):
-        self.request = FakeRequest(url, method)
+    def __init__(self, url, method="GET", post_data=None):
+        self.request = FakeRequest(url, method, post_data)
         self.result = None
 
     def continue_(self):

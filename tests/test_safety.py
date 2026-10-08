@@ -216,3 +216,81 @@ def test_click_refused_if_booking_allowed(monkeypatch):
     with pytest.raises(SafetyViolation):
         safe.click_step(STEP)
     assert button.clicked == 0
+
+
+# --- reviewer hardening -------------------------------------------------------
+
+@pytest.mark.parametrize("label", [
+    "P​ay now",            # zero-width space inside the word
+    "Pay­ment",            # soft hyphen
+    "Ｐａｙ now",   # full-width "Pay"
+    "Complete reservation", "Finish booking", "Place your order",
+    "अभी भुगतान करें", "बुकिंग की पुष्टि करें", "पेमेंट करें",
+])
+def test_deny_labels_resist_evasion(label):
+    assert is_denied_label(label)
+
+
+@pytest.mark.parametrize("element", [
+    FakeElement("Continue", clickable_ancestor=FakeElement("Continue ₹ 9,000 Pay now")),
+    FakeElement("", {"alt": "Pay now"}),                     # <input type=image alt=...>
+    FakeElement("", {"name": "confirm"}),
+    FakeElement("", {"aria-labelledby": "lbl"}),             # label text lives elsewhere
+])
+def test_refuses_pay_label_on_ancestor_or_hidden_attribute(element):
+    _, safe = make_page({STEP: element, '[id="lbl"]': FakeElement("Confirm and pay")})
+    with pytest.raises(SafetyViolation):
+        safe.click_step(STEP)
+    assert element.clicked == 0
+
+
+def test_refuses_element_with_no_readable_label():
+    icon_only = FakeElement("")
+    _, safe = make_page({STEP: icon_only})
+    with pytest.raises(SafetyViolation):
+        safe.click_step(STEP)
+    assert icon_only.clicked == 0
+
+
+def test_refuses_unsafe_aria_labelledby_reference():
+    element = FakeElement("Continue", {"aria-labelledby": 'x"],[id=y'})
+    _, safe = make_page({STEP: element})
+    with pytest.raises(SafetyViolation):
+        safe.click_step(STEP)
+    assert element.clicked == 0
+
+
+def test_safe_ancestor_still_clickable(tmp_path):
+    element = FakeElement("Select", clickable_ancestor=FakeElement("Select room"))
+    _, safe = make_page({STEP: element}, tmp_path=tmp_path)
+    safe.click_step(STEP)
+    assert element.clicked == 1
+
+
+@pytest.mark.parametrize("body", [
+    '{"operationName":"CreateBooking","variables":{}}',
+    '{"query":"mutation { confirm_reservation(id: 1) }"}',
+    "action=place-order&hotel=1",
+])
+def test_guard_blocks_commit_bodies_on_generic_endpoints(body):
+    assert make_guard().block_reason("https://www.booking.com/dml/graphql", "POST", body)
+
+
+def test_guard_allows_search_bodies_and_ignores_get_bodies():
+    guard = make_guard()
+    assert guard.block_reason("https://www.booking.com/dml/graphql", "POST", '{"operationName":"SearchRooms"}') is None
+    assert guard.block_reason("https://www.booking.com/x", "GET", "createbooking") is None
+
+
+def test_handle_reads_request_body():
+    route = FakeRoute("https://www.example.com/graphql", "POST", '{"operationName":"CreateBooking"}')
+    make_guard().handle(route)
+    assert route.result == "aborted"
+
+
+def test_safe_page_closes_popups(tmp_path):
+    page = FakePage()
+    SafePage(page, "booking_com", ["booking.com"], [], tmp_path)
+    popup = FakePage()
+    page.handlers["popup"](popup)
+    assert popup.closed

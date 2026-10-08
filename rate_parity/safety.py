@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import re
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, Iterable
@@ -25,11 +26,17 @@ log = logging.getLogger(__name__)
 BOOKING_ALLOWED = False  # Never change. A test asserts this.
 
 DENY_LABEL = re.compile(
-    r"\b(pay|payment|confirm|complete (your )?booking|place order"
+    r"\b(pay|payment|confirm|complete (your )?(booking|reservation)"
+    r"|finish (your )?(booking|reservation)|place (your )?order"
     r"|book (now )?(and|&) pay|submit|purchase|checkout now|proceed to pay"
-    r"|card|upi|wallet)",
+    r"|card|upi|wallet)"
+    r"|भुगतान|पेमेंट|पुष्टि|कार्ड",  # Hindi: payment, payment, confirm, card
     re.IGNORECASE,
 )
+_SAFE_ID = re.compile(r"^[A-Za-z0-9_:.-]+$")
+# Nearest ancestor that actually receives the click (a child span may say "Continue"
+# while the button around it says "Pay now").
+_CLICKABLE_ANCESTOR = "xpath=ancestor::*[self::button or self::a or self::label or @role='button'][1]"
 
 # Always blocked, whatever config says. Config can only add to this list.
 PAYMENT_HOST_KEYWORDS = (
@@ -41,6 +48,16 @@ PAYMENT_HOST_KEYWORDS = (
 DEFAULT_COMMIT_PATH_PATTERNS = (
     "/book", "/confirm", "/payment", "/pay/", "/reservation/create",
     "/checkout/complete", "/order",
+)
+
+
+# Always checked on non-GET request bodies (letters only, lower-case), so a booking
+# sent through a generic endpoint such as /graphql is still blocked.
+COMMIT_BODY_KEYWORDS = (
+    "createbooking", "bookingcreate", "confirmbooking", "bookingconfirm",
+    "completebooking", "makebooking", "submitbooking", "createreservation",
+    "reservationcreate", "confirmreservation", "completereservation",
+    "placeorder", "initiatepayment", "makepayment",
 )
 
 
@@ -60,8 +77,15 @@ class SelectorMissing(Exception):
     """A configured selector was not found on the page."""
 
 
+def _normalize_label(text: str) -> str:
+    """NFKC (full-width letters) and drop invisible format chars (zero-width space, soft hyphen)."""
+    text = unicodedata.normalize("NFKC", text)
+    text = "".join(ch for ch in text if unicodedata.category(ch) != "Cf")
+    return " ".join(text.split())
+
+
 def is_denied_label(text: str | None) -> bool:
-    return bool(text) and bool(DENY_LABEL.search(" ".join(text.split())))
+    return bool(text) and bool(DENY_LABEL.search(_normalize_label(text)))
 
 
 def host_allowed(host: str | None, allowed_domains: Iterable[str]) -> bool:
@@ -101,6 +125,11 @@ class SafePage:
         self._screenshot_dir = Path(screenshot_dir)
         self._timeout_ms = timeout_ms
         self._pause = pause
+        page.on("popup", self._close_popup)  # new tabs/windows escape the allowlist: close them
+
+    def _close_popup(self, popup) -> None:
+        log.warning("%s: closed a popup/new tab the agent did not open", self._site)
+        popup.close()
 
     def goto(self, url: str) -> None:
         check_url_allowed(url, self._domains)
@@ -140,8 +169,12 @@ class SafePage:
         if selector not in self._steps:
             raise SafetyViolation(f"{self._site}: selector is not a configured step: {selector}")
         self.wait_for(selector)
-        element = self._page.locator(selector).first
-        for label in self._labels(element):
+        # Pin ONE element so the element we checked is the element we click.
+        element = self._page.locator(selector).first.element_handle(timeout=self._timeout_ms)
+        labels = self._labels(element)
+        if not labels:  # icon-only / CSS-only text: we cannot tell what it does
+            raise SafetyViolation(f"{self._site}: refusing to click an element with no readable label ({selector})")
+        for label in labels:
             if is_denied_label(label):
                 raise SafetyViolation(f"{self._site}: refusing to click {label!r} ({selector})")
         self._pause()
@@ -153,10 +186,23 @@ class SafePage:
         self._page.close()
 
     def _labels(self, element) -> list[str]:
-        labels = [element.inner_text(timeout=self._timeout_ms)]
-        for attribute in ("aria-label", "value", "title"):
-            labels.append(element.get_attribute(attribute))
-        return [label for label in labels if label]
+        """Every label of the element and of the clickable ancestor around it."""
+        targets = [element]
+        ancestor = element.query_selector(_CLICKABLE_ANCESTOR)
+        if ancestor is not None:
+            targets.append(ancestor)
+        labels = []
+        for target in targets:
+            labels.append(target.inner_text(timeout=self._timeout_ms))
+            for attribute in ("aria-label", "value", "title", "alt", "name"):
+                labels.append(target.get_attribute(attribute))
+            for ref in (target.get_attribute("aria-labelledby") or "").split():
+                if not _SAFE_ID.match(ref):
+                    raise SafetyViolation(f"{self._site}: unreadable aria-labelledby {ref!r}; refusing to click")
+                labelled = self._page.query_selector(f'[id="{ref}"]')
+                if labelled is not None:
+                    labels.append(labelled.inner_text(timeout=self._timeout_ms))
+        return [label for label in labels if label and label.strip()]
 
 
 class NetworkGuard:
@@ -168,7 +214,7 @@ class NetworkGuard:
         self.installed = False
         self.aborted: list[str] = []
 
-    def block_reason(self, url: str, method: str) -> str | None:
+    def block_reason(self, url: str, method: str, body: str | None = None) -> str | None:
         parts = urlsplit(url)
         host = (parts.hostname or "").lower()
         for keyword in self.payment_hosts:
@@ -179,11 +225,19 @@ class NetworkGuard:
             for pattern in self.commit_paths:
                 if pattern in path:
                     return f"booking-commit request ({pattern})"
+            compact = re.sub(r"[^a-z]", "", (body or "").lower())
+            for keyword in COMMIT_BODY_KEYWORDS:
+                if keyword in compact:
+                    return f"booking-commit request body ({keyword})"
         return None
 
     def handle(self, route) -> None:
         request = route.request
-        reason = self.block_reason(request.url, request.method)
+        try:
+            body = request.post_data
+        except Exception:  # binary body: path rules still apply
+            body = None
+        reason = self.block_reason(request.url, request.method, body)
         if reason is None:
             route.continue_()
             return
@@ -208,5 +262,7 @@ def self_check(guard: NetworkGuard | None) -> None:
         raise SafetyViolation("deny-label rule is broken")
     if guard.block_reason("https://api.razorpay.com/v1/payments", "GET") is None:
         raise SafetyViolation("payment gateway blocking is broken")
+    if guard.block_reason("https://x.example/graphql", "POST", '{"operationName":"CreateBooking"}') is None:
+        raise SafetyViolation("booking-commit body blocking is broken")
     if not guard.commit_paths:
         raise SafetyViolation("no booking-commit patterns configured")
