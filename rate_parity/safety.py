@@ -189,6 +189,11 @@ class SafePage:
     def texts(self, selector: str, limit: int = 12, width: int = 60) -> list[str]:
         return [" ".join(t.split())[:width] for t in self._page.locator(selector).all_inner_texts()[:limit]]
 
+    def attribute_values(self, selector: str, attribute: str, limit: int = 300) -> list[str]:
+        """Values of one attribute on matching elements (read-only, for diagnostics)."""
+        locator = self._page.locator(selector)
+        return [v for i in range(min(locator.count(), limit)) if (v := locator.nth(i).get_attribute(attribute))]
+
     def title(self) -> str:
         return self._page.title()
 

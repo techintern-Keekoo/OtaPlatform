@@ -44,6 +44,9 @@ class FakeLocator:
     def count(self):
         return 0 if self.element is None else 1
 
+    def nth(self, i):
+        return self.element
+
     def all_inner_texts(self):
         return [] if self.element is None else [self.element.text]
 

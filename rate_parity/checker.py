@@ -88,6 +88,12 @@ def diagnose(page) -> list[str]:
         except Exception as exc:
             lines.append(f"ERROR {sel}: {type(exc).__name__}")
     try:
+        from collections import Counter
+        import re
+        labels = Counter(re.sub(r"^-?\d+", "*", v) for v in page.attribute_values(  # "7083...-selectRoom" -> "*-selectRoom"
+            "[data-testid*='oom'], [data-testid*='rice'], [data-testid*='ate'], [data-testid*='ancel']", "data-testid"))
+        lines.append("page labels (data-testid) about rooms/prices: " + ", ".join(
+            f"{name} x{n}" for name, n in sorted(labels.items()))[:1200])
         lines.append("room names seen: " + " | ".join(page.texts("[data-testid='room-name']")))
         for i, text in enumerate(page.texts("[data-testid='room-offer']", limit=16, width=110)):
             lines.append(f"offer {i + 1}: {text}")
