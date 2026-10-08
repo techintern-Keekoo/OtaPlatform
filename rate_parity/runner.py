@@ -85,8 +85,12 @@ class StayCheck:
         if not ota.ready:
             prices, note = None, "not set up yet (selectors still TODO in config)"
         else:
-            prices, note = _attempt(self.quick, ota, lambda c, p: c.quick_scan(p, self.stay))
+            result, note = _attempt(
+                self.quick, ota, lambda c, p: (c.quick_scan(p, self.stay), getattr(c, "offer_types", {})))
+            prices, self._offers = result if result else (None, {})
         return [self._check_room(ota, room_id, prices, note) for room_id in ota.rooms]
+
+    _offers: dict = {}
 
     def _check_room(self, ota: Site, room_id: str, ota_prices, ota_note: str) -> CheckRow:
         key = self.cfg.rooms[room_id]
@@ -99,23 +103,27 @@ class StayCheck:
         web_search = (self.web_prices or {}).get(room_id)
         row.website_search_price = web_search
         row.search_price = (ota_prices or {}).get(room_id)
+        row.ota_offer = self._offers.get(room_id, "") if row.search_price is not None else ""
         if web_search is not None and not getattr(self.web_collector, "needs_browser", True):
             web, _ = self.website_summary(room_id)  # eZee: same cached search, no extra request
             row.website_final = web.final if web else None
         if web_search is None:
             return _finish(row, Status.COULD_NOT_CHECK, self.web_note or "website search price not found")
         if row.search_price is None:
-            return _finish(row, Status.COULD_NOT_CHECK, ota_note or "OTA search price not found (sold out or selector)")
+            return _finish(row, Status.COULD_NOT_CHECK, ota_note or "no OTA price (room sold out or not listed)")
         if not is_suspect(row.search_price, web_search, self.cfg.min_margin_pct):
             return _finish(row, Status.IN_PARITY, "OTA search price above Zen")
 
+        if not ota.deep_ready:
+            return _finish(row, Status.COULD_NOT_CHECK,
+                           "possible violation, verify manually: OTA price not above Zen (checkout check not configured yet)")
         web, web_note = self.website_summary(room_id)
         if web is None or web.final <= 0:
             return _finish(row, Status.COULD_NOT_CHECK, f"website checkout: {web_note or 'no valid total'}")
         row.website_final = web.final
         summary, note = _attempt(self.deep, ota, lambda c, p: c.deep_check(p, self.stay, room_id))
         if summary is None:
-            return _finish(row, Status.COULD_NOT_CHECK, note)
+            return _finish(row, Status.COULD_NOT_CHECK, f"possible violation, verify manually: {note}")
 
         row.login_state = summary.login_state
         row.checkout_room_price, row.gst = summary.room_price, summary.gst

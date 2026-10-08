@@ -19,6 +19,17 @@ TAGS = {
 }
 
 
+SHORT_OFFER = {"free cancellation": "", "cancellation policy": " policy", "non-refundable": " non-ref"}
+
+
+def _cell(r) -> str:
+    if r.status is Status.COULD_NOT_CHECK and r.search_price is not None:
+        tag = "VERIFY"  # OTA price not above Zen, but checkout not confirmed
+    else:
+        tag = TAGS[r.status]
+    return f"{_money(r.search_price)} {tag}{SHORT_OFFER.get(r.ota_offer.lower(), '')}"
+
+
 def _money(value) -> str:
     return "-" if value is None else f"{value:,.0f}"
 
@@ -28,13 +39,14 @@ def build_table(rows: list[CheckRow], when: datetime) -> str:
     lines = [
         f"Rate parity check {when:%d-%b-%Y %H:%M} IST",
         "Rule: Zen (website) must be CHEAPER than every OTA. Prices per night, before tax.",
-        "ok = Zen is cheaper | LOWER! = OTA is equal or cheaper than Zen | n/a = could not check",
+        "ok = Zen is cheaper | LOWER! = OTA equal/cheaper (confirmed) | VERIFY = OTA looks equal/cheaper, check by hand",
+        "n/a = no price (sold out / not set up) | non-ref = only non-refundable offer | policy = 'cancellation policy' offer",
     ]
     nights = list(dict.fromkeys(r.checkin for r in rows))
     for night in nights:
         night_rows = [r for r in rows if r.checkin == night]
         rooms = list(dict.fromkeys(r.room for r in night_rows))
-        header = f"{'Room':<38}{'Zen':>9}" + "".join(f"{ota:>20}" for ota in otas)
+        header = f"{'Room':<38}{'Zen':>9}" + "".join(f"{ota:>22}" for ota in otas)
         lines += ["", f"Check-in {night}", header, "-" * len(header)]
         for room in rooms:
             cells = {r.ota: r for r in night_rows if r.room == room}
@@ -42,7 +54,7 @@ def build_table(rows: list[CheckRow], when: datetime) -> str:
             line = f"{room[:37]:<38}{_money(zen):>9}"
             for ota in otas:
                 r = cells.get(ota)
-                line += f"{(_money(r.search_price) + ' ' + TAGS[r.status]) if r else '-':>20}"
+                line += f"{_cell(r) if r else '-':>22}"
             lines.append(line)
     problems = [r for r in rows if r.status is Status.VIOLATION]
     lines += ["", f"{len(problems)} problem(s): OTA equal to or cheaper than Zen."]

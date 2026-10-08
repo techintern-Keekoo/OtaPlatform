@@ -19,13 +19,20 @@ class GenericCollector(Collector):
         self.check_blocked(page)
         if self.site.scroll_to_load:
             page.scroll_through()
-        prices = {}
+        prices, self.offer_types = {}, {}
         for room_id, room in self.site.rooms.items():
-            text = page.read_text(room.search_price)
-            try:
-                prices[room_id] = parse_money(text)
-            except MoneyError as exc:
-                log.info("%s %s: no search price (%s)", self.site.key, room_id, exc)
+            for offer, selector in room.price_options or (("", room.search_price),):
+                text = page.read_text(selector)
+                if text is None:
+                    continue  # this offer type is not on the page; try the next
+                try:
+                    prices[room_id] = parse_money(text)
+                    self.offer_types[room_id] = offer
+                    break
+                except MoneyError as exc:
+                    log.info("%s %s: unreadable price %r (%s)", self.site.key, room_id, text, exc)
+            if room_id not in prices:
+                log.info("%s %s: no price on page (sold out or not listed?)", self.site.key, room_id)
         return prices
 
     def deep_check(self, page: SafePage, stay: Stay, room_id: str) -> Summary:

@@ -17,6 +17,11 @@ property:
 # more expensive than Zen.
 min_margin_pct: 0
 
+# true (option A): when an OTA has no free-cancellation offer for a room, compare
+# its other offer (cancellation policy / non-refundable) and label it in the
+# report. false (option B): free cancellation only; other rooms show n/a.
+compare_non_refundable: true
+
 stay:
   days_ahead: [0, 1]    # check-in tonight and tomorrow night (IST), each run
   nights: 1
@@ -256,9 +261,16 @@ sites:
     captcha_selectors: []
     block_texts: []
     room_template:
-      # Agoda lists a Non-refundable AND a Free Cancellation offer per room;
-      # :has-text('{cancellation}') picks the free-cancellation one.
-      search_price: "TODO-verify: [data-testid='room-item']:has([data-testid='room-name']:text-is('{room}')) [data-testid='room-offer']:has-text('{cancellation}') [data-testid='room-offer-final-price']"
+      # Each room box lists 1-2 offers. Tried in this order, first found wins;
+      # the offer type is shown in the report (e.g. "non-ref"). Close to the
+      # date Agoda often has no Free Cancellation offer (seen 8 Oct 2026).
+      search_price:
+        - offer: free cancellation
+          selector: "TODO-verify: [data-testid='room-item']:has([data-testid='room-name']:has-text('{room}')) [data-testid='room-offer']:has-text('Free Cancellation') [data-testid='room-offer-final-price']"
+        - offer: cancellation policy
+          selector: "TODO-verify: [data-testid='room-item']:has([data-testid='room-name']:has-text('{room}')) [data-testid='room-offer']:has-text('Cancellation policy') [data-testid='room-offer-final-price']"
+        - offer: non-refundable
+          selector: "TODO-verify: [data-testid='room-item']:has([data-testid='room-name']:has-text('{room}')) [data-testid='room-offer']:has-text('Non-refundable') [data-testid='room-offer-final-price']"
       steps:
         - "TODO-verify: [data-testid='room-item']:has([data-testid='room-name']:text-is('{room}')) [data-testid='room-offer']:has-text('{cancellation}') [data-testid='book-button']"
       summary:

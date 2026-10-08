@@ -5,6 +5,7 @@ Secrets are never read from here; they come from the environment (.env).
 from __future__ import annotations
 
 import dataclasses
+import re
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
@@ -38,10 +39,12 @@ class SummarySelectors:
 @dataclass(frozen=True)
 class SiteRoom:
     labels: RoomKey  # how this site words the room / meal plan / cancellation
-    search_price: str
+    search_price: str  # first price selector (kept for the checker / simple sites)
     steps: tuple[str, ...]
     summary: SummarySelectors | None
     ezee_room_type: str | None = None  # kind "ezee" only: the engine's RoomTypeUnkId
+    # (offer type, selector) tried in order; the first that is on the page wins.
+    price_options: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -59,6 +62,7 @@ class Site:
     rooms: dict[str, SiteRoom]
     kind: str = "browser"  # "browser" (Playwright + selectors) or "ezee" (website search, no browser)
     ready: bool = True  # False: still has TODOs; reported as "not set up", never opened
+    deep_ready: bool = True  # False: checkout check not set up; suspects become "verify manually"
     scroll_to_load: bool = False  # scroll down after loading (room list loads lazily)
     ezee_hotel: str | None = None
 
@@ -181,12 +185,28 @@ def _site_room(data: dict, where: str, canonical: RoomKey, template: dict | None
     if "steps" not in data:
         raise ConfigError(f"{where}.steps is required ([] = read the summary fields on the search page, no clicks)")
     steps = _strings(data, "steps", where)
+    options = _price_options(data.get("search_price"), f"{where}.search_price")
     return SiteRoom(
         labels=_room_key(labels, f"{where}.labels") if labels else canonical,
-        search_price=_get(data, "search_price", where, str),
+        search_price=options[0][1],
         steps=steps,
         summary=_summary(_get(data, "summary", where, dict), f"{where}.summary"),
+        price_options=options,
     )
+
+
+def _price_options(value, where: str) -> tuple[tuple[str, str], ...]:
+    """search_price is one selector, or a list of {offer, selector} tried in order."""
+    if isinstance(value, str) and value:
+        return (("", value),)
+    if isinstance(value, list) and value:
+        options = []
+        for i, item in enumerate(value):
+            if not isinstance(item, dict):
+                raise ConfigError(f"{where}[{i}] must be a mapping with offer and selector")
+            options.append((_get(item, "offer", f"{where}[{i}]", str), _get(item, "selector", f"{where}[{i}]", str)))
+        return tuple(options)
+    raise ConfigError(f"{where} must be a selector or a list of {{offer, selector}}")
 
 
 def _ezee_site(key: str, data: dict, rooms: dict[str, RoomKey]) -> Site:
@@ -262,29 +282,36 @@ def _find_todos(value, path: str):
             yield from _find_todos(v, f"{path}[{i}]")
 
 
-def _check_placeholders(raw: dict) -> set[str]:
+_DEEP_ONLY = re.compile(r"\.(steps|summary)(\[|\.|$)")
+
+
+def _check_placeholders(raw: dict) -> tuple[set[str], set[str]]:
     """Raise if the website or shared settings still have TODOs.
 
-    Returns the enabled OTA keys that still have TODOs: those are skipped and
-    reported as "not set up", so the other sites can run meanwhile.
+    Returns (not_ready, not_deep_ready) OTA keys. not_ready: TODOs in what
+    the quick scan needs; skipped and reported "not set up". not_deep_ready:
+    TODOs only in checkout steps/summary; the quick scan runs, suspects are
+    reported "possible violation, verify manually".
     """
     sites = raw.get("sites")
     if not isinstance(sites, dict):
         raise ConfigError("config.sites must be a mapping")
     shared = {k: v for k, v in raw.items() if k != "sites"}
     todos = list(_find_todos(shared, "config"))
-    not_ready = set()
+    not_ready, not_deep = set(), set()
     for key, site in sites.items():
         if not isinstance(site, dict) or not site.get("enabled"):
             continue  # a malformed site is reported clearly by _site() later
         site_todos = list(_find_todos(site, f"config.sites.{key}"))
         if site_todos and key == "website":
             todos += site_todos
-        elif site_todos:
+        elif any(not _DEEP_ONLY.search(path) for path in site_todos):
             not_ready.add(key)
+        elif site_todos:
+            not_deep.add(key)
     if todos:
         raise ConfigError("unfilled TODO placeholders: " + ", ".join(todos))
-    return not_ready
+    return not_ready, not_deep
 
 
 def _validate_sites(sites: dict[str, Site]) -> None:
@@ -302,7 +329,7 @@ def _validate_sites(sites: dict[str, Site]) -> None:
 def parse_config(raw: dict, check_placeholders: bool = True) -> Config:
     if not isinstance(raw, dict):
         raise ConfigError("config file must be a YAML mapping")
-    not_ready = _check_placeholders(raw) if check_placeholders else set()
+    not_ready, not_deep = _check_placeholders(raw) if check_placeholders else (set(), set())
 
     rooms = {}
     for i, item in enumerate(_get(raw, "rooms", "config", list)):
@@ -312,6 +339,12 @@ def parse_config(raw: dict, check_placeholders: bool = True) -> Config:
     sites = {k: _site(k, v, rooms) for k, v in _get(raw, "sites", "config", dict).items()}
     for key in not_ready:
         sites[key] = dataclasses.replace(sites[key], ready=False)
+    for key in not_deep:
+        sites[key] = dataclasses.replace(sites[key], deep_ready=False)
+    if not _get(raw, "compare_non_refundable", "config", bool, True):  # option B: first offer type only
+        for key, site in sites.items():
+            rooms = {rid: dataclasses.replace(r, price_options=r.price_options[:1]) for rid, r in site.rooms.items()}
+            sites[key] = dataclasses.replace(site, rooms=rooms)
     _validate_sites(sites)
 
     stay = _get(raw, "stay", "config", dict)

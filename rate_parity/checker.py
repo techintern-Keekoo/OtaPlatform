@@ -45,7 +45,8 @@ def fields_to_check(site) -> list[tuple[str, str, str | None]]:
     """(room_id, field, selector) for everything readable on the search page."""
     rows = [("-", "logged_in_marker", site.logged_in_marker)]
     for room_id, room in site.rooms.items():
-        rows.append((room_id, "search_price", room.search_price))
+        for offer, selector in room.price_options or (("", room.search_price),):
+            rows.append((room_id, f"price[{offer}]" if offer else "search_price", selector))
         for i, step in enumerate(room.steps):
             rows.append((room_id, f"step[{i}] (exists only)", step))
         if not room.steps and room.summary:  # no-click mode: summary is on this page
@@ -88,6 +89,8 @@ def diagnose(page) -> list[str]:
             lines.append(f"ERROR {sel}: {type(exc).__name__}")
     try:
         lines.append("room names seen: " + " | ".join(page.texts("[data-testid='room-name']")))
+        for i, text in enumerate(page.texts("[data-testid='room-offer']", limit=16, width=110)):
+            lines.append(f"offer {i + 1}: {text}")
     except Exception as exc:
         lines.append(f"room names seen: ERROR {type(exc).__name__}")
     return lines

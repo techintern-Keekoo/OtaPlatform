@@ -55,6 +55,7 @@ class CheckRow:
     login_state: str = ""
     search_price: Decimal | None = None
     website_search_price: Decimal | None = None
+    ota_offer: str = ""  # which offer type the OTA price is (e.g. non-refundable)
     checkout_room_price: Decimal | None = None
     gst: Decimal | None = None
     fees: Decimal | None = None

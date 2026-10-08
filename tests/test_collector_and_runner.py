@@ -146,7 +146,8 @@ def test_not_suspect_skips_deep_check(check, monkeypatch):
 def test_blocked_becomes_could_not_check(check, monkeypatch):
     monkeypatch.setattr(FakeCollector, "ota_error", Blocked("login wall", "re-login to Booking.com"))
     row = check()
-    assert row.status is Status.COULD_NOT_CHECK and row.note == "re-login to Booking.com"
+    assert row.status is Status.COULD_NOT_CHECK
+    assert row.note == "possible violation, verify manually: re-login to Booking.com"
 
 
 def test_crash_becomes_could_not_check(check, monkeypatch):
@@ -199,3 +200,36 @@ def test_scroll_to_load_scrolls_before_reading(tmp_path):
     page = SafePage(fake, site.key, site.allowed_domains, site.step_selectors(), tmp_path)
     assert GenericCollector(site).quick_scan(page, STAY) == {"r1": D("9000")}
     assert fake.mouse.wheel_calls > 0
+
+
+def test_price_options_fall_back_and_remember_offer_type(tmp_path):
+    import copy
+    raw = copy.deepcopy(RAW)
+    raw["sites"]["booking_com"]["rooms"]["r1"]["search_price"] = [
+        {"offer": "free cancellation", "selector": "#fc"},
+        {"offer": "non-refundable", "selector": "#nr"},
+    ]
+    site = parse_config(raw).sites["booking_com"]
+    fake = FakePage({"#nr": FakeElement("₹ 2,336"), "body": FakeElement("rooms")})
+    page = SafePage(fake, site.key, site.allowed_domains, site.step_selectors(), tmp_path)
+    collector = GenericCollector(site)
+    assert collector.quick_scan(page, STAY) == {"r1": D("2336")}
+    assert collector.offer_types == {"r1": "non-refundable"}
+
+
+def test_option_b_compares_first_offer_type_only():
+    import copy
+    raw = copy.deepcopy(RAW)
+    raw["compare_non_refundable"] = False
+    raw["sites"]["booking_com"]["rooms"]["r1"]["search_price"] = [
+        {"offer": "free cancellation", "selector": "#fc"}, {"offer": "non-refundable", "selector": "#nr"}]
+    assert parse_config(raw).sites["booking_com"].rooms["r1"].price_options == (("free cancellation", "#fc"),)
+
+
+def test_suspect_without_checkout_setup_is_verify_manually(check, monkeypatch):
+    import dataclasses
+    stay_check = runner.StayCheck(CFG, FakeGuardedContext("logged_out"), FakeGuardedContext("profile"), STAY)
+    monkeypatch.setattr(runner, "make_collector", FakeCollector)
+    ota = dataclasses.replace(CFG.sites["booking_com"], deep_ready=False)
+    row = stay_check.check_ota(ota)[0]
+    assert row.status is Status.COULD_NOT_CHECK and row.note.startswith("possible violation, verify manually")

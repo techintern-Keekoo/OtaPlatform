@@ -185,8 +185,8 @@ class SafePage:
     def count(self, selector: str) -> int:
         return self._page.locator(selector).count()
 
-    def texts(self, selector: str, limit: int = 12) -> list[str]:
-        return [" ".join(t.split())[:60] for t in self._page.locator(selector).all_inner_texts()[:limit]]
+    def texts(self, selector: str, limit: int = 12, width: int = 60) -> list[str]:
+        return [" ".join(t.split())[:width] for t in self._page.locator(selector).all_inner_texts()[:limit]]
 
     def title(self) -> str:
         return self._page.title()
