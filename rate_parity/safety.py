@@ -203,6 +203,14 @@ class SafePage:
         path.write_text(self._page.content(), encoding="utf-8")
         return str(path)
 
+    def scroll_into_view(self, selector: str) -> bool:
+        """Scroll an element (e.g. the "Select your room" heading) on screen. Read-only."""
+        locator = self._page.locator(selector)
+        if locator.count() == 0:
+            return False
+        locator.first.scroll_into_view_if_needed(timeout=self._timeout_ms)
+        return True
+
     def scroll_through(self, steps: int = 10, pause_ms: int = 600) -> None:
         """Scroll down with the mouse wheel so lazy-loaded room lists appear.
 

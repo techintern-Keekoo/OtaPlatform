@@ -27,6 +27,9 @@ class FakeElement:
     def click(self, timeout=None):
         self.clicked += 1
 
+    def scroll_into_view_if_needed(self, timeout=None):
+        pass
+
 
 class FakeLocator:
     def __init__(self, element):

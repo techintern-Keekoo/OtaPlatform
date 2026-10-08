@@ -128,15 +128,11 @@ def check_site(cfg, site_key: str, days: int = 14, use_profile: bool = False) ->
         try:
             self_check(context.guard)
             page = context.new_safe_page(site)
-            page.goto(site.search_url_for(stay))
-            if site.scroll_to_load:
-                page.scroll_through()  # lazy-loaded room lists only appear after scrolling
-            first = next((candidate(r.search_price) for r in site.rooms.values() if candidate(r.search_price)), None)
-            if first:
-                try:
-                    page.wait_for(first)  # let the page render its room list
-                except SelectorMissing:
-                    pass
+            from .collectors import GenericCollector
+            try:
+                GenericCollector(site).load(page, stay)  # same loading + waiting as the real run
+            except SelectorMissing as exc:
+                print(f"\nNOTE: {exc}")
             shot = page.screenshot(f"check_{site_key}")
             html = page.save_html(f"check_{site_key}")
             text_file = Path(html).with_suffix(".txt")

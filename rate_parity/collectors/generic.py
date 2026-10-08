@@ -14,11 +14,31 @@ log = logging.getLogger(__name__)
 
 
 class GenericCollector(Collector):
+    def load(self, page: SafePage, stay: Stay, attempts: int = 2) -> None:
+        """Open the search page and wait until the room list is really there.
+
+        OTAs load the room list late. Scroll, bring the list heading on screen,
+        wait for a room box; if it never comes, reload once, then give up with
+        a clear reason instead of reading an empty page.
+        """
+        for attempt in range(1, attempts + 1):
+            page.goto(self.site.search_url_for(stay))
+            self.check_blocked(page)
+            if self.site.scroll_to_load:
+                page.scroll_through()
+            if self.site.scroll_to:
+                page.scroll_into_view(self.site.scroll_to)
+            if not self.site.wait_for:
+                return
+            try:
+                page.wait_for(self.site.wait_for)
+                return
+            except SelectorMissing:
+                log.warning("%s: room list not loaded (attempt %d of %d)", self.site.key, attempt, attempts)
+        raise SelectorMissing(f"{self.site.label}: room list did not load (tried {attempts} times)")
+
     def quick_scan(self, page: SafePage, stay: Stay) -> dict[str, Decimal]:
-        page.goto(self.site.search_url_for(stay))
-        self.check_blocked(page)
-        if self.site.scroll_to_load:
-            page.scroll_through()
+        self.load(page, stay)
         prices, self.offer_types = {}, {}
         for room_id, room in self.site.rooms.items():
             for offer, selector in room.price_options or (("", room.search_price),):
@@ -38,10 +58,7 @@ class GenericCollector(Collector):
     def deep_check(self, page: SafePage, stay: Stay, room_id: str) -> Summary:
         room = self.site.rooms[room_id]
         fields = room.summary
-        page.goto(self.site.search_url_for(stay))
-        self.check_blocked(page)
-        if self.site.scroll_to_load:
-            page.scroll_through()
+        self.load(page, stay)
         login_state = self.login_state(page)
         for step in room.steps:
             page.click_step(step)

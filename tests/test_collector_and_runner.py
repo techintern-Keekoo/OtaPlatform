@@ -233,3 +233,27 @@ def test_suspect_without_checkout_setup_is_verify_manually(check, monkeypatch):
     ota = dataclasses.replace(CFG.sites["booking_com"], deep_ready=False)
     row = stay_check.check_ota(ota)[0]
     assert row.status is Status.COULD_NOT_CHECK and row.note.startswith("possible violation, verify manually")
+
+
+def _loading_site(**kw):
+    import dataclasses
+    return dataclasses.replace(CFG.sites["booking_com"], scroll_to="text=Select your room", wait_for=".room-box", **kw)
+
+
+def test_load_waits_for_room_list(tmp_path):
+    site = _loading_site()
+    fake = FakePage({".room-box": FakeElement("Deluxe"), "text=Select your room": FakeElement("Select your room"),
+                     "body": FakeElement("rooms")})
+    page = SafePage(fake, site.key, site.allowed_domains, site.step_selectors(), tmp_path)
+    GenericCollector(site).load(page, STAY)
+    assert len(fake.visited) == 1
+
+
+def test_load_reloads_once_then_gives_a_clear_reason(tmp_path):
+    from rate_parity.safety import SelectorMissing
+    site = _loading_site()
+    fake = FakePage({"body": FakeElement("Select your room About us")})  # empty room list
+    page = SafePage(fake, site.key, site.allowed_domains, site.step_selectors(), tmp_path)
+    with pytest.raises(SelectorMissing, match="room list did not load"):
+        GenericCollector(site).load(page, STAY)
+    assert len(fake.visited) == 2  # tried, reloaded once, stopped

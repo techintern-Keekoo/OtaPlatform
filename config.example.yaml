@@ -251,6 +251,8 @@ sites:
     label: Agoda
     enabled: true
     scroll_to_load: true   # room list loads only after scrolling down
+    scroll_to: "text=Select your room"       # heading above the room list (live page, 8 Oct 2026)
+    wait_for: "[data-testid='room-item']"     # wait until at least one room box is there
     allowed_domains: ["agoda.com"]
     # Agoda takes check-in + length of stay (los). los=1 matches stay.nights: 1;
     # change both together. finalPriceView=1 asks Agoda to show the total price.
@@ -272,7 +274,7 @@ sites:
         - offer: non-refundable
           selector: "TODO-verify: [data-testid='room-item']:has([data-testid='room-name']:has-text('{room}')) [data-testid='room-offer']:has-text('Non-refundable') [data-testid='room-offer-final-price']"
       steps:
-        - "TODO-verify: [data-testid='room-item']:has([data-testid='room-name']:text-is('{room}')) [data-testid='room-offer']:has-text('{cancellation}') [data-testid='book-button']"
+        - "TODO-verify: [data-testid='room-item']:has([data-testid='room-name']:has-text('{room}')) [data-testid='room-offer']:has-text('{cancellation}') [data-testid='book-button']"
       summary:
         ready: "TODO: selector only present on the booking summary page"
         room_name: "TODO"

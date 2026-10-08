@@ -64,6 +64,8 @@ class Site:
     ready: bool = True  # False: still has TODOs; reported as "not set up", never opened
     deep_ready: bool = True  # False: checkout check not set up; suspects become "verify manually"
     scroll_to_load: bool = False  # scroll down after loading (room list loads lazily)
+    scroll_to: str | None = None   # then scroll this element on screen (e.g. the room-list heading)
+    wait_for: str | None = None    # then wait for this (e.g. a room box); reload once if it never comes
     ezee_hotel: str | None = None
 
     def search_url_for(self, stay: Stay) -> str:
@@ -267,6 +269,8 @@ def _site(key: str, data: dict, rooms: dict[str, RoomKey]) -> Site:
         captcha_selectors=_strings(data, "captcha_selectors", where),
         block_texts=_strings(data, "block_texts", where),
         scroll_to_load=_get(data, "scroll_to_load", where, bool, False),
+        scroll_to=_get(data, "scroll_to", where, str, None),
+        wait_for=_get(data, "wait_for", where, str, None),
         rooms=site_rooms,
     )
 
