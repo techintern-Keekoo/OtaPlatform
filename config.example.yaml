@@ -175,19 +175,18 @@ sites:
         fees: null
         discount: null
         final: null   # table shows no total: final = room price + taxes, both read from the page
-    # Proposed matches (evidence in docs/site-findings.md). Confirm in the
-    # Booking.com extranet, then delete "TODO-confirm: ".
+    # Room matches confirmed by Keekoo on 2026-10-08 (evidence: docs/site-findings.md).
     rooms:
       standard_garden:
-        labels: {room: "TODO-confirm: Deluxe Room", meal_plan: "TODO-verify", cancellation: "Free cancellation"}
+        labels: {room: "Deluxe Room", meal_plan: "TODO-verify", cancellation: "Free cancellation"}
       deluxe_valley:
-        labels: {room: "TODO-confirm: Deluxe Double Room", meal_plan: "TODO-verify", cancellation: "Free cancellation"}
+        labels: {room: "Deluxe Double Room", meal_plan: "TODO-verify", cancellation: "Free cancellation"}
       deluxe_mountain:
-        labels: {room: "TODO-confirm: Double Room with Mountain View", meal_plan: "TODO-verify", cancellation: "Free cancellation"}
+        labels: {room: "Double Room with Mountain View", meal_plan: "TODO-verify", cancellation: "Free cancellation"}
       family_suite:
-        labels: {room: "TODO-confirm: Superior Family Room", meal_plan: "TODO-verify", cancellation: "Free cancellation"}
+        labels: {room: "Superior Family Room", meal_plan: "TODO-verify", cancellation: "Free cancellation"}
       premium_cottage:
-        labels: {room: "TODO-confirm: Superior Chalet", meal_plan: "TODO-verify", cancellation: "Free cancellation"}
+        labels: {room: "Superior Chalet", meal_plan: "TODO-verify", cancellation: "Free cancellation"}
 
   # Week 2+. Fill like booking_com, then set enabled: true.
   makemytrip:

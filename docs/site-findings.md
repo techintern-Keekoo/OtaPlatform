@@ -96,7 +96,7 @@ Screenshots, from a read-only Firecrawl capture:
 - Booking.com room table: https://backend.composio.dev/api/v3/sl/GtmNo4P1zZ
 - Website (eZee) room list: https://backend.composio.dev/api/v3/sl/f0dL4Zb7Nw
 
-| Website room (max guests) | MMT size / bed | Proposed Booking.com room | Why | Confidence |
+| Website room (max guests) | MMT size / bed | Booking.com room | Why | Confidence |
 |---|---|---|---|---|
 | Standard garden view room (3) | 17 m², double | **Deluxe Room** (₹2,915) | The only non-dorm room with **garden view**; cheapest on every site | High |
 | Premium cottage Mountain View Room (4) | 21 m², king | **Superior Chalet** (₹5,009) | "Entire chalet" = cottage; mountain view | High |
@@ -105,7 +105,7 @@ Screenshots, from a read-only Firecrawl capture:
 | Deluxe mountain view room (4) | 21 m², king | **Double Room with Mountain View** (₹4,099) | Name says mountain view; price order matches | **Low** |
 | (none on website) | Quadruple Room | Quadruple Room | Bunk beds; OTA-only, never compared | n/a |
 
-The two "Low" rows are a guess from price order: both Booking.com rooms say "mountain view". Confirm all five in the Booking.com extranet (Property > Rooms) before go-live.
+**All five matches were confirmed by Keekoo on 2026-10-08**, including the two that started as price-order guesses.
 
 ### Listing problems seen (worth fixing with each OTA)
 
