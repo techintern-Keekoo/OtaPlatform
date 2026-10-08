@@ -153,3 +153,40 @@ def test_crash_becomes_could_not_check(check, monkeypatch):
     monkeypatch.setattr(FakeCollector, "ota_error", RuntimeError("boom"))
     row = check()
     assert row.status is Status.COULD_NOT_CHECK and "boom" in row.note
+
+
+def _no_click_cfg():
+    import copy
+    raw = copy.deepcopy(RAW)
+    room = raw["sites"]["booking_com"]["rooms"]["r1"]
+    room["steps"] = []
+    room["summary"] = {**SUMMARY, "final": None, "fees": None}
+    return parse_config(raw)
+
+
+def test_no_click_deep_check_adds_shown_price_and_taxes(tmp_path):
+    cfg = _no_click_cfg()
+    fake, page = summary_page()
+    page._screenshot_dir = tmp_path
+    result = GenericCollector(cfg.sites["booking_com"]).deep_check(page, STAY, "r1")
+    assert result.final == D("9000")  # 8,036 + 964, both read from the page
+    assert "final = room price + taxes as shown on page" in result.notes
+    assert fake.visited == ["https://www.booking.com/h?ci=2026-10-15&co=2026-10-16&a=2"]  # no clicks needed
+
+
+def test_no_click_deep_check_without_taxes_cannot_check(tmp_path):
+    from rate_parity.safety import SelectorMissing
+    cfg = _no_click_cfg()
+    _, page = summary_page(**{"#gst": None})
+    page._screenshot_dir = tmp_path
+    with pytest.raises(SelectorMissing):
+        GenericCollector(cfg.sites["booking_com"]).deep_check(page, STAY, "r1")
+
+
+def test_config_needs_final_or_price_and_taxes():
+    import copy
+    from rate_parity.config import ConfigError
+    raw = copy.deepcopy(RAW)
+    raw["sites"]["booking_com"]["rooms"]["r1"]["summary"] = {**SUMMARY, "final": None, "gst": None}
+    with pytest.raises(ConfigError, match="room_price and gst"):
+        parse_config(raw)

@@ -31,7 +31,7 @@ class Stay:
 
 @dataclass
 class Summary:
-    """Values READ from a booking summary page. Nothing here is computed."""
+    """Values READ from the page. final is read, or (if the page shows no total) the sum of the parts it shows."""
     final: Decimal
     room_price: Decimal | None = None
     gst: Decimal | None = None

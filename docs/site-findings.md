@@ -89,3 +89,39 @@ Agoda also shows separate non-refundable and free-cancellation rates. The compar
    - **Date-picker clicks.** Click the date picker with templated selectors. This is more fragile.
 2. **Booking.com deep check.** Room count is a `<select>` (the agent never sets form values), and "I'll reserve" is a form submit to `/book.html`, which the network guard blocks. The Booking.com deep check stays `COULD_NOT_CHECK` until this is designed.
 3. **Goibibo and Cleartrip** block automated reads from Firecrawl. They may still work from the office PC's Chrome.
+
+## Booking.com room matching: evidence (scraped 2026-10-08, stay 22–23 Oct)
+
+Screenshots, from a read-only Firecrawl capture:
+- Booking.com room table: https://backend.composio.dev/api/v3/sl/GtmNo4P1zZ
+- Website (eZee) room list: https://backend.composio.dev/api/v3/sl/f0dL4Zb7Nw
+
+| Website room (max guests) | MMT size / bed | Proposed Booking.com room | Why | Confidence |
+|---|---|---|---|---|
+| Standard garden view room (3) | 17 m², double | **Deluxe Room** (₹2,915) | The only non-dorm room with **garden view**; cheapest on every site | High |
+| Premium cottage Mountain View Room (4) | 21 m², king | **Superior Chalet** (₹5,009) | "Entire chalet" = cottage; mountain view | High |
+| Family Suite with Mountain View Room (7) | 2 king beds | **Superior Family Room** (₹5,647) | The only room with 2 beds; 220 m² vs 200 for the others | High |
+| Deluxe valley facing room (3) | 17 m², double | **Deluxe Double Room** (₹3,370) | Price order matches (website, MMT and Booking.com all rank it below Deluxe mountain) | **Low** |
+| Deluxe mountain view room (4) | 21 m², king | **Double Room with Mountain View** (₹4,099) | Name says mountain view; price order matches | **Low** |
+| (none on website) | Quadruple Room | Quadruple Room | Bunk beds; OTA-only, never compared | n/a |
+
+The two "Low" rows are a guess from price order: both Booking.com rooms say "mountain view". Confirm all five in the Booking.com extranet (Property > Rooms) before go-live.
+
+### Listing problems seen (worth fixing with each OTA)
+
+- **Room sizes look wrong.** Booking.com lists every room as **200 m²** (Family 220 m²) and Agoda says **500–550 square meters**, but MakeMyTrip says **17–21 m² (180–225 sq ft)**. Square feet were probably typed into a square-metre field.
+- **Room names don't match the website** on Booking.com ("Superior Chalet" vs "Premium cottage Mountain View Room"), which confuses guests comparing prices.
+- **Valley room shows mountain view.** Booking.com's likely match for the *valley-facing* room says "Mountain view".
+- **Broken booking link.** The second booking link on zenhotels.in (`secure-booking-engine.com/...`) returns HTTP 500.
+
+## Booking.com deep check: solved without clicks
+
+The room table already shows "₹N + ₹M taxes and charges" (and Genius prices when logged in). The agent reads both there: `steps: []`, `final: null`, final = shown price + shown taxes. There is no dropdown and no Reserve click.
+
+## Goibibo and Cleartrip: options
+
+| Option | Goibibo | Cleartrip |
+|---|---|---|
+| 1. Office PC real Chrome (recommended first) | Likely works: the page is a JavaScript app that Firecrawl never rendered (we got the generic shell twice), not a hard block | Possible: strong bot protection; try once by hand with the agent profile |
+| 2. Use MakeMyTrip as a proxy | Same company and same listing (`mmtId=202004271355036572` in the link), so prices are usually identical. Unverified: report as "via MMT", never as a Goibibo check | n/a |
+| 3. Manual weekly spot-check | Fallback | Fallback if the office PC is blocked too |

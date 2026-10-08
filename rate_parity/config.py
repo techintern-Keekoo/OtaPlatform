@@ -27,7 +27,7 @@ class SummarySelectors:
     room_name: str
     meal_plan: str
     cancellation: str
-    final: str
+    final: str | None  # None: page shows no total, so final = room_price + gst (+fees -discount) as shown
     room_price: str | None
     gst: str | None
     fees: str | None
@@ -143,8 +143,10 @@ def _room_key(data: dict, where: str) -> RoomKey:
 
 
 def _summary(data: dict, where: str) -> SummarySelectors:
-    required = {k: _get(data, k, where, str) for k in ("ready", "room_name", "meal_plan", "cancellation", "final")}
-    optional = {k: _get(data, k, where, str, None) for k in ("room_price", "gst", "fees", "discount")}
+    required = {k: _get(data, k, where, str) for k in ("ready", "room_name", "meal_plan", "cancellation")}
+    optional = {k: _get(data, k, where, str, None) for k in ("final", "room_price", "gst", "fees", "discount")}
+    if optional["final"] is None and not (optional["room_price"] and optional["gst"]):
+        raise ConfigError(f"{where}: set final, or both room_price and gst (final is then their sum as shown)")
     return SummarySelectors(**required, **optional)
 
 
@@ -170,9 +172,9 @@ def _site_room(data: dict, where: str, canonical: RoomKey, template: dict | None
             if "'" in text or '"' in text or "{" in text:  # would break the selector it is put into
                 raise ConfigError(f"{where}.labels must not contain quotes or braces: {text!r}")
         data = {**_fill(template, key, where), **data}
+    if "steps" not in data:
+        raise ConfigError(f"{where}.steps is required ([] = read the summary fields on the search page, no clicks)")
     steps = _strings(data, "steps", where)
-    if not steps:
-        raise ConfigError(f"{where}.steps must list the clicks that reach the summary page")
     return SiteRoom(
         labels=_room_key(labels, f"{where}.labels") if labels else canonical,
         search_price=_get(data, "search_price", where, str),

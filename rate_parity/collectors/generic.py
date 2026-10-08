@@ -46,11 +46,7 @@ class GenericCollector(Collector):
         if not room_matches(room.labels, observed):
             raise RoomMismatch(f"summary shows {observed}, expected {room.labels}")
 
-        summary = Summary(
-            final=parse_money(self._required_text(page, fields.final)),
-            login_state=login_state,
-            screenshot_path=screenshot,
-        )
+        summary = Summary(final=Decimal(0), login_state=login_state, screenshot_path=screenshot)
         for name in ("room_price", "gst", "fees", "discount"):
             selector = getattr(fields, name)
             if selector is None:
@@ -60,6 +56,13 @@ class GenericCollector(Collector):
                 summary.notes.append(f"{name} not shown")
                 continue
             setattr(summary, name, parse_money(text))
+        if fields.final is not None:
+            summary.final = parse_money(self._required_text(page, fields.final))
+        elif summary.room_price is None or summary.gst is None:
+            raise SelectorMissing("page shows no total, and room price or taxes were not found")
+        else:  # page shows price and taxes separately (e.g. Booking.com room table); add what it shows
+            summary.final = (summary.room_price + summary.gst + (summary.fees or 0) - (summary.discount or 0))
+            summary.notes.append("final = room price + taxes as shown on page")
         return summary
 
     @staticmethod
