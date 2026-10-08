@@ -146,6 +146,11 @@ def check_site(cfg, site_key: str, days: int = 14, use_profile: bool = False) ->
             print()
             for room_id, field, status, detail in report(page, site):
                 print(f"{status:8} {room_id:18} {field:24} {detail}")
+            blocked = context.guard.aborted
+            print(f"\nRequests blocked by the no-booking network guard: {len(blocked)}")
+            for where in blocked:
+                print("  BLOCKED  " + where)
+            print("(If the room list is empty and something is blocked here, send this list.)")
             print("\nOK = found (check the text is right, then delete 'TODO-verify: ' in config).")
             print("MISSING/ERROR = selector needs fixing. TODO = not filled yet.")
         finally:
