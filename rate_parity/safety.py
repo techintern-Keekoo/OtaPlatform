@@ -29,6 +29,7 @@ DENY_LABEL = re.compile(
     r"\b(pay|payment|confirm|complete (your )?(booking|reservation)"
     r"|finish (your )?(booking|reservation)|place (your )?order"
     r"|book (now )?(and|&) pay|submit|purchase|checkout now|proceed to pay"
+    r"|final step|next step|continue to payment|go to payment"  # Agoda form: "NEXT: FINAL STEP" leads to payment
     r"|card|upi|wallet)"
     r"|भुगतान|पेमेंट|पुष्टि|कार्ड",  # Hindi: payment, payment, confirm, card
     re.IGNORECASE,

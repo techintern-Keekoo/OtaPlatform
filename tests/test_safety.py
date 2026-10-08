@@ -313,3 +313,10 @@ def test_scroll_through_only_uses_the_mouse_wheel(tmp_path):
     fake = FakePage()
     SafePage(fake, "agoda", ["agoda.com"], [], tmp_path).scroll_through(steps=3)
     assert fake.mouse.wheel_calls == 3 and fake.visited == []
+
+
+@pytest.mark.parametrize("label", ["NEXT: FINAL STEP", "Next step", "Continue to payment", "Go to payment"])
+def test_agoda_booking_form_buttons_are_refused(label):
+    # Seen live on Agoda's Booking Form (8 Oct 2026): guest details were pre-filled
+    # for a logged-in user and "NEXT: FINAL STEP" leads to payment.
+    assert safety.is_denied_label(label)
