@@ -119,3 +119,18 @@ def test_gitignore_covers_secrets_and_evidence():
     ignored = (EXAMPLE.parent / ".gitignore").read_text(encoding="utf-8").split()
     for pattern in (".env", ".env.*", "config.yaml", "*.json", "*.pem", "chrome-profile/", "screenshots/", "output/"):
         assert pattern in ignored
+
+
+@pytest.mark.parametrize("site, checkin, expected", [
+    ("makemytrip", (2026, 11, 8), "checkin=11082026&checkout=11092026"),
+    ("goibibo", (2026, 10, 8), "checkin=20261008&checkout=20261009&roomString=1-2-0"),
+    ("agoda", (2026, 10, 8), "checkIn=2026-10-08&los=1&adults=2"),
+    ("cleartrip", (2026, 10, 8), "c=081026%7C091026&r=2%2C0"),
+    ("booking_com", (2026, 10, 8), "checkin=2026-10-08&checkout=2026-10-09&group_adults=2"),
+])
+def test_example_ota_urls_match_real_listing_links(site, checkin, expected):
+    from datetime import date, timedelta
+    from rate_parity.models import Stay
+    start = date(*checkin)
+    url = load_config(EXAMPLE, check_placeholders=False).sites[site].search_url_for(Stay(start, start + timedelta(days=1), 2))
+    assert expected in url

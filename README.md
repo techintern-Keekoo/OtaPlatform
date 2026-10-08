@@ -1,7 +1,7 @@
 # OTA Rate Parity Agent (Keekoo Hospitality)
 
 Checks whether Keekoo's rooms are sold cheaper on OTAs (Booking.com, MakeMyTrip,
-Goibibo, Agoda, Expedia) than on Keekoo's own website, and reports once a day.
+Goibibo, Agoda, Cleartrip) than on Keekoo's own website, and reports once a day.
 
 ## What it does
 
@@ -95,12 +95,13 @@ checked_at (ISO time, Asia/Kolkata).
 
 ## Open questions before go-live
 
-- [ ] **Booking engine:** which engine runs Keekoo's website, and what are its domain(s) and booking flow?
+- [ ] **Booking engine:** which engine runs the website (https://zenhotels.in/), and what is the booking-page URL and its domain(s)?
 - [ ] **Office PC 24/7:** will a dedicated office PC stay on with Chrome and the logged-in profile? It must not be someone's personal profile.
 - [ ] **WATI API access:** the tenant API URL and token, an approved template name, and the parameter name of the template placeholder.
 - [ ] **Alert recipients:** who gets the daily WhatsApp summary?
 - [ ] **OTA logins:** which company email will the OTA accounts use? Manager approval is needed before logging the agent's profile in.
 - [ ] **Blocked checks in WhatsApp:** should `COULD_NOT_CHECK` items be included in the WhatsApp summary? Currently `alerts.include_could_not_check: true`.
-- [ ] **Links:** the property listing link on each OTA, and the website booking link.
-- [ ] **OTAs:** which OTAs is Keekoo actually listed on?
+- [x] **Links:** the OTA listing links (Booking.com, MakeMyTrip, Goibibo, Agoda, Cleartrip) are in `config.example.yaml`. The website booking-page link is still TODO.
+- [x] **OTAs:** Booking.com, MakeMyTrip, Goibibo, Agoda and Cleartrip. Expedia was removed because it was not in the list provided; say if it should come back.
+- [ ] **Selectors:** inspect each live page from the office PC and fill in the `TODO` selectors. The cloud build machine could not reach these sites.
 - [ ] **Tolerance:** what tolerance % does management want? The example uses 1.0, which is a placeholder.

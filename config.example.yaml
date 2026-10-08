@@ -8,7 +8,7 @@
 # they come from .env.
 
 property:
-  name: "TODO: Keekoo property name - UNVERIFIED"
+  name: "Zen Manali by Keekoo Stays"
 
 # OTA final may be up to this many percent below the website final before it
 # counts as a VIOLATION. TODO-confirm with management (value below is a guess).
@@ -75,9 +75,12 @@ sites:
   website:
     label: Keekoo website
     enabled: true
-    allowed_domains: ["todo-keekoo-booking-engine.invalid"]   # TODO: booking engine domain(s) - UNVERIFIED
+    # Property website: https://zenhotels.in/ . If its "Book" button hands off to a
+    # booking-engine domain (eZee, STAAH, Simplotel, ...), add that domain here too,
+    # or every check will stop at the allowlist (fails safe).
+    allowed_domains: ["zenhotels.in"]
     # Placeholders: {checkin} {checkout} (date_format) and {adults}
-    search_url: "https://todo-keekoo-booking-engine.invalid/search?checkin={checkin}&checkout={checkout}&adults={adults}"   # TODO - UNVERIFIED
+    search_url: "https://zenhotels.in/TODO-booking-page?checkin={checkin}&checkout={checkout}&adults={adults}"   # TODO: real booking-page URL - UNVERIFIED
     date_format: "%Y-%m-%d"
     logged_in_marker: null          # website deep check is done as a guest
     login_wall_selectors: []
@@ -105,7 +108,8 @@ sites:
     label: Booking.com
     enabled: true
     allowed_domains: ["booking.com"]
-    search_url: "https://www.booking.com/hotel/in/TODO-property-slug.html?checkin={checkin}&checkout={checkout}&group_adults={adults}&no_rooms=1"   # TODO - UNVERIFIED
+    # From the property link; affiliate/session params (aid, label, sid, srpvid, blocks) removed.
+    search_url: "https://www.booking.com/hotel/in/keekoo-manali-manali.html?checkin={checkin}&checkout={checkout}&group_adults={adults}&group_children=0&no_rooms=1&req_adults={adults}&req_children=0"
     date_format: "%Y-%m-%d"
     logged_in_marker: "TODO: selector visible only when logged in - UNVERIFIED"
     login_wall_selectors: ["TODO: sign-in modal selector - UNVERIFIED"]
@@ -132,28 +136,38 @@ sites:
           discount: null
           final: "TODO - UNVERIFIED"
 
-  # Week 2+. Fill like booking_com, then set enabled: true.
+  # Week 2+. URLs come from the property's real listing links (tracking params
+  # removed). Fill rooms/selectors like booking_com, then set enabled: true.
   makemytrip:
     label: MakeMyTrip
     enabled: false
     allowed_domains: ["makemytrip.com"]
-    search_url: "https://www.makemytrip.com/TODO?checkin={checkin}&checkout={checkout}&adults={adults}"
+    # MMT dates are MMDDYYYY (11082026 = 8 Nov 2026). rsc = rooms e adults e children.
+    search_url: "https://www.makemytrip.com/hotels/hotel-details/?hotelId=202004271355036572&_uCurrency=INR&checkin={checkin}&checkout={checkout}&city=CTKUU&country=IN&locusId=CTKUU&locusType=city&roomStayQualifier={adults}e0e&rsc=1e{adults}e0e"
+    date_format: "%m%d%Y"
     rooms: {}
   goibibo:
     label: Goibibo
     enabled: false
     allowed_domains: ["goibibo.com"]
-    search_url: "https://www.goibibo.com/TODO?checkin={checkin}&checkout={checkout}&adults={adults}"
+    # roomString = rooms-adults-children
+    search_url: "https://www.goibibo.com/hotels/hotel-details/?checkin={checkin}&checkout={checkout}&roomString=1-{adults}-0&locusId=CTKUU&locusType=city&cityCode=CTKUU&cc=IN&_uCurrency=INR&giHotelId=2508145749391752109&mmtId=202004271355036572"
+    date_format: "%Y%m%d"
     rooms: {}
   agoda:
     label: Agoda
     enabled: false
     allowed_domains: ["agoda.com"]
-    search_url: "https://www.agoda.com/TODO?checkIn={checkin}&checkOut={checkout}&adults={adults}"
+    # Agoda takes check-in + length of stay (los). los=1 matches stay.nights: 1;
+    # change both together. finalPriceView=1 asks Agoda to show the total price.
+    search_url: "https://www.agoda.com/en-in/zen-manali-by-keekoo-stays/hotel/manali-in.html?checkIn={checkin}&los=1&adults={adults}&children=0&rooms=1&currencyCode=INR&finalPriceView=1"
+    date_format: "%Y-%m-%d"
     rooms: {}
-  expedia:
-    label: Expedia
+  cleartrip:
+    label: Cleartrip
     enabled: false
-    allowed_domains: ["expedia.co.in"]   # TODO: confirm .co.in vs .com - UNVERIFIED
-    search_url: "https://www.expedia.co.in/TODO?chkin={checkin}&chkout={checkout}&adults={adults}"
+    allowed_domains: ["cleartrip.com"]
+    # c = checkin|checkout as DDMMYY ("|" is %7C), r = adults,children
+    search_url: "https://www.cleartrip.com/hotels/details/zen-manali-by-keekoo-stays-4533148?c={checkin}%7C{checkout}&r={adults}%2C0"
+    date_format: "%d%m%y"
     rooms: {}
