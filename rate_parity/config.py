@@ -286,7 +286,9 @@ def _find_todos(value, path: str):
             yield from _find_todos(v, f"{path}[{i}]")
 
 
-_DEEP_ONLY = re.compile(r"\.(steps|summary)(\[|\.|$)")
+# Only used by the checkout (deep) check: steps, summary selectors, and the meal /
+# cancellation wording compared on the summary page.
+_DEEP_ONLY = re.compile(r"\.(steps|summary|labels\.meal_plan|labels\.cancellation)(\[|\.|$)")
 
 
 def _check_placeholders(raw: dict) -> tuple[set[str], set[str]]:

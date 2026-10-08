@@ -22,7 +22,7 @@ def test_example_config_parses():
 def test_otas_with_todos_are_not_set_up_but_run_continues():
     cfg = load_config(EXAMPLE)  # website has no TODOs, so this loads
     assert cfg.website.ready
-    assert [s.key for s in cfg.otas() if not s.ready] == ["booking_com", "makemytrip", "goibibo", "agoda", "cleartrip"]
+    assert [s.key for s in cfg.otas() if not s.ready] == ["booking_com", "makemytrip", "goibibo", "cleartrip"]
 
 
 def test_website_with_todos_refuses_to_run(tmp_path):
@@ -192,3 +192,8 @@ def test_room_template_rejects_quotes_in_labels():
     raw, _ = _raw_with_template("Bob's Room')")
     with pytest.raises(ConfigError, match="quotes"):
         parse_config(raw, check_placeholders=False)
+
+
+def test_agoda_quick_scan_ready_while_checkout_check_is_not():
+    agoda = load_config(EXAMPLE).sites["agoda"]
+    assert agoda.ready and not agoda.deep_ready  # prices run; a suspect becomes "verify manually"
