@@ -84,13 +84,17 @@ class StayCheck:
     def check_ota(self, ota: Site) -> list[CheckRow]:
         if not ota.ready:
             prices, note = None, "not set up yet (selectors still TODO in config)"
+            self._offers, self._taxes, self._evidence = {}, {}, ""
         else:
-            result, note = _attempt(
-                self.quick, ota, lambda c, p: (c.quick_scan(p, self.stay), getattr(c, "offer_types", {})))
-            prices, self._offers = result if result else (None, {})
+            result, note = _attempt(self.quick, ota, lambda c, p: (
+                c.quick_scan(p, self.stay), getattr(c, "offer_types", {}),
+                getattr(c, "card_taxes", {}), getattr(c, "evidence", "")))
+            prices, self._offers, self._taxes, self._evidence = result if result else (None, {}, {}, "")
         return [self._check_room(ota, room_id, prices, note) for room_id in ota.rooms]
 
     _offers: dict = {}
+    _taxes: dict = {}
+    _evidence: str = ""
 
     def _check_room(self, ota: Site, room_id: str, ota_prices, ota_note: str) -> CheckRow:
         key = self.cfg.rooms[room_id]
@@ -111,7 +115,18 @@ class StayCheck:
             return _finish(row, Status.COULD_NOT_CHECK, self.web_note or "website search price not found")
         if row.search_price is None:
             return _finish(row, Status.COULD_NOT_CHECK, ota_note or "no OTA price (room sold out or not listed)")
-        if not is_suspect(row.search_price, web_search, self.cfg.min_margin_pct):
+        suspect = is_suspect(row.search_price, web_search, self.cfg.min_margin_pct)
+        tax = self._taxes.get(room_id)
+        if tax is not None and row.website_final is not None:
+            # The room list shows price AND taxes (MakeMyTrip): final is known from the
+            # same page load, so no second visit. Both numbers were read from the page.
+            row.checkout_room_price, row.gst = row.search_price, tax
+            row.final_payable = row.search_price + tax
+            row.gap_pct = gap_pct(row.final_payable, row.website_final)
+            row.screenshot_path = self._evidence
+            status = decide_status(row.final_payable, row.website_final, self.cfg.min_margin_pct, suspect=suspect)
+            return _finish(row, status, "final = price + taxes & fees shown on the room list (one page load)")
+        if not suspect:
             return _finish(row, Status.IN_PARITY, "OTA search price above Zen")
 
         if not ota.deep_ready:

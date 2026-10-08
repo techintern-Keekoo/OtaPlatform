@@ -42,12 +42,14 @@ class GenericCollector(Collector):
 
     def quick_scan(self, page: SafePage, stay: Stay) -> dict[str, Decimal]:
         self.load(page, stay)
-        prices, self.offer_types = {}, {}
+        prices, self.offer_types, self.card_taxes, self.evidence = {}, {}, {}, ""
         for room_id, room in self.site.rooms.items():
             if room.price_text:
                 found = read_price_text(page, room.price_text)
                 if found:
-                    prices[room_id], _, self.offer_types[room_id] = found
+                    prices[room_id], tax, self.offer_types[room_id] = found
+                    if tax is not None:  # price AND taxes on the list: final known, no second visit
+                        self.card_taxes[room_id] = tax
                 else:
                     log.info("%s %s: no price on page (sold out or not listed?)", self.site.key, room_id)
                 continue
@@ -63,6 +65,8 @@ class GenericCollector(Collector):
                     log.info("%s %s: unreadable price %r (%s)", self.site.key, room_id, text, exc)
             if room_id not in prices:
                 log.info("%s %s: no price on page (sold out or not listed?)", self.site.key, room_id)
+        if self.card_taxes:  # evidence for finals decided from this one page load
+            self.evidence = page.screenshot(f"list_{stay.checkin.isoformat()}")
         return prices
 
     def deep_check(self, page: SafePage, stay: Stay, room_id: str) -> Summary:
