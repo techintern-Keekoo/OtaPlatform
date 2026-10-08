@@ -39,7 +39,8 @@ class SiteRoom:
     labels: RoomKey  # how this site words the room / meal plan / cancellation
     search_price: str
     steps: tuple[str, ...]
-    summary: SummarySelectors
+    summary: SummarySelectors | None
+    ezee_room_type: str | None = None  # kind "ezee" only: the engine's RoomTypeUnkId
 
 
 @dataclass(frozen=True)
@@ -55,6 +56,8 @@ class Site:
     captcha_selectors: tuple[str, ...]
     block_texts: tuple[str, ...]
     rooms: dict[str, SiteRoom]
+    kind: str = "browser"  # "browser" (Playwright + selectors) or "ezee" (website search, no browser)
+    ezee_hotel: str | None = None
 
     def search_url_for(self, stay: Stay) -> str:
         return (
@@ -183,8 +186,36 @@ def _site_room(data: dict, where: str, canonical: RoomKey, template: dict | None
     )
 
 
+def _ezee_site(key: str, data: dict, rooms: dict[str, RoomKey]) -> Site:
+    where = f"sites.{key}"
+    domains = _strings(data, "allowed_domains", where)
+    url = _get(data, "search_url", where, str)
+    parts = urlsplit(url)
+    if parts.scheme != "https" or not host_allowed(parts.hostname, domains) or "/booking/" not in parts.path:
+        raise ConfigError(f"{where}.search_url must be the https eZee room-list page inside allowed_domains")
+    site_rooms = {}
+    for room_id, room_data in _get(data, "rooms", where, dict, {}).items():
+        if room_id not in rooms:
+            raise ConfigError(f"{where}.rooms.{room_id} is not defined in top-level rooms")
+        type_id = _get(room_data, "ezee_room_type", f"{where}.rooms.{room_id}", str)
+        if not type_id.isdigit():
+            raise ConfigError(f"{where}.rooms.{room_id}.ezee_room_type must be digits")
+        site_rooms[room_id] = SiteRoom(labels=rooms[room_id], search_price="", steps=(), summary=None,
+                                       ezee_room_type=type_id)
+    return Site(
+        key=key, label=_get(data, "label", where, str, key), enabled=_get(data, "enabled", where, bool, False),
+        allowed_domains=domains, search_url=url, date_format="%d_%m_%Y", logged_in_marker=None,
+        login_wall_selectors=(), captcha_selectors=(), block_texts=(), rooms=site_rooms,
+        kind="ezee", ezee_hotel=_get(data, "ezee_hotel", where, str),
+    )
+
+
 def _site(key: str, data: dict, rooms: dict[str, RoomKey]) -> Site:
     where = f"sites.{key}"
+    if isinstance(data, dict) and data.get("kind", "browser") == "ezee":
+        return _ezee_site(key, data, rooms)
+    if isinstance(data, dict) and data.get("kind", "browser") != "browser":
+        raise ConfigError(f"{where}.kind must be browser or ezee")
     domains = _strings(data, "allowed_domains", where)
     url = _get(data, "search_url", where, str)
     parts = urlsplit(url.replace("{", "").replace("}", ""))

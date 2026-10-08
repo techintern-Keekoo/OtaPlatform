@@ -107,46 +107,23 @@ sites:
   website:
     label: Keekoo website
     enabled: true
-    # zenhotels.in "Book Now" -> eZee (Yanolja) engine on book.zenhotels.in
-    # (CNAME of live.ipms247.com). Rates shown "Exclusive of Tax".
+    # zenhotels.in "Book Now" -> eZee (Yanolja) engine on book.zenhotels.in.
+    # kind: ezee = NO browser. The agent sends the same read-only search the
+    # website's "Search" button sends (POST /booking/roomlisting.php with the
+    # dates) and reads each plan's price, tax and total from the reply. It
+    # picks the refundable plan bookable for 1 night (skips "3 Min Nights"
+    # deals). Verified live on 2026-10-08 (22 Oct: Standard Rs 1,545.60 +
+    # Rs 77.28 tax = Rs 1,622.88).
+    kind: ezee
     allowed_domains: ["book.zenhotels.in"]
-    # TODO: eZee IGNORED ?checkin=22-10-2026 and ?checkin=2026-10-22&nonights=1
-    # (always opened on today). Needs the eZee rate API or a deep-link param.
-    search_url: "https://book.zenhotels.in/booking/roomlist-zenmanalibykeekoostays-be?TODO-date-param={checkin}"
-    date_format: "%d-%m-%Y"
-    logged_in_marker: null          # website deep check is done as a guest
-    login_wall_selectors: []
-    captcha_selectors: []
-    block_texts: []
-    room_template:
-      steps:
-        - "TODO: open this room's 1-night rate plan"
-        - "TODO: Book Now for that plan (leads to summary, not payment)"
-      summary:
-        ready: "TODO: selector only present on the booking summary page"
-        room_name: "TODO"
-        meal_plan: "TODO"
-        cancellation: "TODO"
-        room_price: "TODO"
-        gst: "TODO"
-        fees: null
-        discount: null
-        final: "TODO: total payable incl. taxes"
+    search_url: "https://book.zenhotels.in/booking/roomlist-zenmanalibykeekoostays-be"
+    ezee_hotel: zenmanalibykeekoostays
     rooms:
-      # eZee room-type ids (stable). CAUTION: #roomtype_<id> shows the room's
-      # LOWEST rate, which on 8 Oct was a 3-night-minimum deal (Rs 1,363.44)
-      # while the 1-night rate was Rs 1,468.32. search_price must point at the
-      # 1-night plan, or every check would raise false violations.
-      standard_garden:
-        search_price: "TODO-verify: 1-night plan price for room id 4757200000000000001 (#roomtype_4757200000000000001 = lowest incl. min-stay deals)"
-      deluxe_valley:
-        search_price: "TODO-verify: 1-night plan price for room id 4757200000000000002"
-      deluxe_mountain:
-        search_price: "TODO-verify: 1-night plan price for room id 4757200000000000003"
-      family_suite:
-        search_price: "TODO-verify: 1-night plan price for room id 4757200000000000005"
-      premium_cottage:
-        search_price: "TODO-verify: 1-night plan price for room id 4757200000000000006"
+      standard_garden: {ezee_room_type: "4757200000000000001"}
+      deluxe_valley: {ezee_room_type: "4757200000000000002"}
+      deluxe_mountain: {ezee_room_type: "4757200000000000003"}
+      family_suite: {ezee_room_type: "4757200000000000005"}
+      premium_cottage: {ezee_room_type: "4757200000000000006"}
 
   booking_com:
     label: Booking.com

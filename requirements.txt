@@ -1,8 +1,10 @@
-playwright==1.48.0
-PyYAML==6.0.2
-gspread==6.1.4
-google-auth==2.35.0
-requests==2.32.3
-python-dotenv==1.0.1
-tzdata==2024.2
-pytest==8.3.3
+# Minimum versions; pip picks the newest release that has a ready-made wheel
+# for your Python (an exact old pin forced greenlet to compile on new Python).
+playwright>=1.48
+PyYAML>=6.0.2
+gspread>=6.1.4
+google-auth>=2.35
+requests>=2.32.3
+python-dotenv>=1.0.1
+tzdata>=2024.2      # Asia/Kolkata timestamps on Windows
+pytest>=8.3

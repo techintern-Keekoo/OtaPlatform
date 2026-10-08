@@ -17,6 +17,8 @@ class RoomMismatch(Exception):
 
 
 class Collector(ABC):
+    needs_browser = True  # False: the collector fetches data itself and gets page=None
+
     def __init__(self, site: Site):
         self.site = site
 

@@ -32,12 +32,15 @@ def build_stays(cfg: Config, today: date) -> list[Stay]:
     return stays
 
 
-def _attempt(context: browser.GuardedContext, site: Site, action):
-    """Run action(collector, page) on a fresh SafePage. Returns (result, note)."""
+def _attempt(context: browser.GuardedContext, site: Site, action, collector=None):
+    """Run action(collector, page) on a fresh SafePage (None if the collector
+    needs no browser). Returns (result, note)."""
     page = None
     try:
-        page = context.new_safe_page(site)
-        return action(make_collector(site), page), ""
+        collector = collector or make_collector(site)
+        if getattr(collector, "needs_browser", True):
+            page = context.new_safe_page(site)
+        return action(collector, page), ""
     except Blocked as exc:
         log.warning("%s", exc)
         return None, exc.flag
@@ -64,13 +67,17 @@ class StayCheck:
 
     def __init__(self, cfg: Config, quick, deep, stay: Stay):
         self.cfg, self.quick, self.deep, self.stay = cfg, quick, deep, stay
-        self.web_prices, self.web_note = _attempt(quick, cfg.website, lambda c, p: c.quick_scan(p, stay))
+        # Reused for every room, so the website (eZee) search runs once per stay.
+        web = cfg.website
+        self.web_collector = make_collector(web, cfg.screenshot_dir) if web.kind == "ezee" else make_collector(web)
+        self.web_prices, self.web_note = _attempt(
+            quick, cfg.website, lambda c, p: c.quick_scan(p, stay), self.web_collector)
         self._web_summaries: dict[str, tuple[Summary | None, str]] = {}
 
     def website_summary(self, room_id: str) -> tuple[Summary | None, str]:
         if room_id not in self._web_summaries:
             self._web_summaries[room_id] = _attempt(
-                self.deep, self.cfg.website, lambda c, p: c.deep_check(p, self.stay, room_id)
+                self.deep, self.cfg.website, lambda c, p: c.deep_check(p, self.stay, room_id), self.web_collector
             )
         return self._web_summaries[room_id]
 
