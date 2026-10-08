@@ -1,0 +1,15 @@
+# secrets and local config
+.env
+config.yaml
+*.json
+
+# browser profile (contains OTA login sessions) and evidence
+chrome-profile/
+screenshots/
+output/
+
+# python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/

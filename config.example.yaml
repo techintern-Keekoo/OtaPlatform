@@ -1,0 +1,159 @@
+# Keekoo OTA Rate Parity Agent - example configuration.
+#
+# Copy to config.yaml (gitignored) and replace EVERY "TODO" value after
+# inspecting the live pages. The agent refuses to run while an enabled site
+# still contains "TODO". Nothing site-specific here has been verified yet.
+#
+# Secrets (WATI token, Google service account, sheet id) are NOT set here;
+# they come from .env.
+
+property:
+  name: "TODO: Keekoo property name - UNVERIFIED"
+
+# OTA final may be up to this many percent below the website final before it
+# counts as a VIOLATION. TODO-confirm with management (value below is a guess).
+tolerance_pct: 1.0
+
+stay:
+  days_ahead: [7, 30]   # check-in dates = today (IST) + each value
+  nights: 1
+  adults: 2
+
+# Canonical rate plans to track. An OTA price is only compared with the
+# website price for the SAME room + meal plan + cancellation policy.
+rooms:
+  - id: room_1
+    room: "TODO: room name - UNVERIFIED"
+    meal_plan: "TODO: e.g. Breakfast included - UNVERIFIED"
+    cancellation: "TODO: e.g. Free cancellation - UNVERIFIED"
+
+browser:
+  # Dedicated profile directory used ONLY by this agent. A human logs in to
+  # each OTA once with `python -m rate_parity login`. Never point this at
+  # your personal Chrome profile.
+  profile_dir: chrome-profile
+  channel: chrome          # installed Google Chrome; set to null for bundled Chromium
+  headless: false          # OTAs are more likely to show CAPTCHA when headless
+  timeout_ms: 30000
+  delay_seconds: [5, 12]   # random polite pause before every page load / click
+
+network:
+  # Payment gateways (razorpay, payu, paytm, stripe, adyen, juspay, ccavenue,
+  # billdesk, cashfree, checkout.com, braintree, paypal) are ALWAYS blocked.
+  # Add more host keywords here; you cannot remove the built-in ones.
+  extra_payment_host_keywords: []
+  # Any non-GET request whose URL path contains one of these is aborted.
+  # NOTE: if an OTA reaches its summary page via a POST to one of these paths,
+  # the deep check will fail safely (COULD_NOT_CHECK); review before changing.
+  commit_path_patterns:
+    - /book
+    - /confirm
+    - /payment
+    - /pay/
+    - /reservation/create
+    - /checkout/complete
+    - /order
+
+output:
+  screenshot_dir: screenshots
+  csv_path: output/rate_parity.csv
+  sheet_worksheet: checks
+
+alerts:
+  # UNVERIFIED: must equal the {{placeholder}} name in the approved WATI template.
+  template_param_name: summary
+  include_could_not_check: true   # open question: send blocked checks or not
+  max_chars: 900                  # WhatsApp template parameters are length-limited
+
+# ---------------------------------------------------------------------------
+# Sites. Selectors are CSS/Playwright selectors. `steps` are the ONLY elements
+# the agent may click, in order, to go from the search/room page to the booking
+# SUMMARY page. The agent never types anything, so it stops at the summary.
+# Any step whose label reads like pay/confirm/submit/card/upi/wallet is refused.
+# ---------------------------------------------------------------------------
+sites:
+  website:
+    label: Keekoo website
+    enabled: true
+    allowed_domains: ["todo-keekoo-booking-engine.invalid"]   # TODO: booking engine domain(s) - UNVERIFIED
+    # Placeholders: {checkin} {checkout} (date_format) and {adults}
+    search_url: "https://todo-keekoo-booking-engine.invalid/search?checkin={checkin}&checkout={checkout}&adults={adults}"   # TODO - UNVERIFIED
+    date_format: "%Y-%m-%d"
+    logged_in_marker: null          # website deep check is done as a guest
+    login_wall_selectors: []
+    captcha_selectors: []
+    block_texts: []                 # extra text that means "blocked"
+    rooms:
+      room_1:
+        # labels: optional - how THIS site words room/meal plan/cancellation
+        search_price: "TODO: selector for room_1 price on search page - UNVERIFIED"
+        steps:
+          - "TODO: selector to select room_1 rate plan - UNVERIFIED"
+          - "TODO: selector to continue to booking summary - UNVERIFIED"
+        summary:
+          ready: "TODO: selector only present on the summary page - UNVERIFIED"
+          room_name: "TODO - UNVERIFIED"
+          meal_plan: "TODO - UNVERIFIED"
+          cancellation: "TODO - UNVERIFIED"
+          room_price: "TODO - UNVERIFIED"
+          gst: "TODO - UNVERIFIED"
+          fees: null                  # set to a selector if the page shows fees
+          discount: null              # set to a selector if the page shows a discount
+          final: "TODO: total payable selector - UNVERIFIED"
+
+  booking_com:
+    label: Booking.com
+    enabled: true
+    allowed_domains: ["booking.com"]
+    search_url: "https://www.booking.com/hotel/in/TODO-property-slug.html?checkin={checkin}&checkout={checkout}&group_adults={adults}&no_rooms=1"   # TODO - UNVERIFIED
+    date_format: "%Y-%m-%d"
+    logged_in_marker: "TODO: selector visible only when logged in - UNVERIFIED"
+    login_wall_selectors: ["TODO: sign-in modal selector - UNVERIFIED"]
+    captcha_selectors: ["TODO: captcha frame selector - UNVERIFIED"]
+    block_texts: []
+    rooms:
+      room_1:
+        labels:
+          room: "TODO: room name as Booking.com shows it - UNVERIFIED"
+          meal_plan: "TODO - UNVERIFIED"
+          cancellation: "TODO - UNVERIFIED"
+        search_price: "TODO - UNVERIFIED"
+        steps:
+          - "TODO: rooms dropdown / select for this rate plan - UNVERIFIED"
+          - "TODO: reserve button that leads to the summary (not pay) - UNVERIFIED"
+        summary:
+          ready: "TODO - UNVERIFIED"
+          room_name: "TODO - UNVERIFIED"
+          meal_plan: "TODO - UNVERIFIED"
+          cancellation: "TODO - UNVERIFIED"
+          room_price: "TODO - UNVERIFIED"
+          gst: "TODO - UNVERIFIED"
+          fees: null
+          discount: null
+          final: "TODO - UNVERIFIED"
+
+  # Week 2+. Fill like booking_com, then set enabled: true.
+  makemytrip:
+    label: MakeMyTrip
+    enabled: false
+    allowed_domains: ["makemytrip.com"]
+    search_url: "https://www.makemytrip.com/TODO?checkin={checkin}&checkout={checkout}&adults={adults}"
+    rooms: {}
+  goibibo:
+    label: Goibibo
+    enabled: false
+    allowed_domains: ["goibibo.com"]
+    search_url: "https://www.goibibo.com/TODO?checkin={checkin}&checkout={checkout}&adults={adults}"
+    rooms: {}
+  agoda:
+    label: Agoda
+    enabled: false
+    allowed_domains: ["agoda.com"]
+    search_url: "https://www.agoda.com/TODO?checkIn={checkin}&checkOut={checkout}&adults={adults}"
+    rooms: {}
+  expedia:
+    label: Expedia
+    enabled: false
+    allowed_domains: ["expedia.co.in"]   # TODO: confirm .co.in vs .com - UNVERIFIED
+    search_url: "https://www.expedia.co.in/TODO?chkin={checkin}&chkout={checkout}&adults={adults}"
+    rooms: {}

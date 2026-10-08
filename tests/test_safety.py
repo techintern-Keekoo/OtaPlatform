@@ -1,0 +1,218 @@
+import pytest
+
+from rate_parity import safety
+from rate_parity.safety import (
+    DEFAULT_COMMIT_PATH_PATTERNS, NetworkGuard, SafePage, SafetyViolation,
+    SelectorMissing, is_denied_label, self_check,
+)
+from tests.fakes import FakeContext, FakeElement, FakePage, FakeRoute
+
+STEP = "#select-room"
+NEXT = "#next"
+
+
+def make_page(elements=None, redirect_to=None, tmp_path=None, steps=(STEP, NEXT)):
+    fake = FakePage(elements, url="https://www.booking.com/hotel/x.html", redirect_to=redirect_to)
+    safe = SafePage(fake, "booking_com", ["booking.com"], steps, tmp_path or "screenshots")
+    return fake, safe
+
+
+def test_booking_is_never_allowed():
+    assert safety.BOOKING_ALLOWED is False
+
+
+@pytest.mark.parametrize("label", [
+    "Pay Now", "pay", "Payment", "Confirm", "Confirm booking", "Complete booking",
+    "Complete your booking", "Place order", "Book now and pay", "Book & pay",
+    "Book now & pay", "Submit", "Purchase", "Checkout now", "Proceed to pay",
+    "Add card", "Pay via UPI", "Wallet", "PAY  NOW", "confirmation", "Payable at hotel",
+])
+def test_deny_labels(label):
+    assert is_denied_label(label)
+
+
+@pytest.mark.parametrize("label", [
+    "Select room", "I'll reserve", "Reserve", "Continue", "Next: Final details",
+    "See availability", "Show prices", "", None,
+])
+def test_allowed_labels(label):
+    assert not is_denied_label(label)
+
+
+def test_click_configured_safe_step(tmp_path):
+    button = FakeElement("I'll reserve")
+    _, safe = make_page({STEP: button}, tmp_path=tmp_path)
+    safe.click_step(STEP)
+    assert button.clicked == 1
+
+
+def test_refuses_unconfigured_selector():
+    button = FakeElement("Continue")
+    _, safe = make_page({"#other": button})
+    with pytest.raises(SafetyViolation):
+        safe.click_step("#other")
+    assert button.clicked == 0
+
+
+@pytest.mark.parametrize("element", [
+    FakeElement("Pay now"),
+    FakeElement("", {"aria-label": "Complete booking"}),
+    FakeElement("", {"value": "Submit"}),
+    FakeElement("→", {"title": "Proceed to pay"}),
+])
+def test_refuses_denied_element_even_if_configured(element):
+    _, safe = make_page({STEP: element})
+    with pytest.raises(SafetyViolation):
+        safe.click_step(STEP)
+    assert element.clicked == 0
+
+
+def test_missing_step_raises_selector_missing():
+    _, safe = make_page({})
+    with pytest.raises(SelectorMissing):
+        safe.click_step(STEP)
+
+
+def test_click_that_lands_off_allowlist_is_stopped():
+    button = FakeElement("Continue")
+    fake, safe = make_page({STEP: button})
+    fake.url = "https://pay.example-gateway.com/checkout"
+    with pytest.raises(SafetyViolation):
+        safe.click_step(STEP)
+
+
+@pytest.mark.parametrize("url", [
+    "http://www.booking.com/hotel/x.html",
+    "https://evil.com/hotel",
+    "https://booking.com.evil.com/",
+    "https://www.booking.com@evil.com/",
+    "javascript:alert(1)",
+])
+def test_goto_refuses_bad_urls(url):
+    fake, safe = make_page()
+    with pytest.raises(SafetyViolation):
+        safe.goto(url)
+    assert fake.visited == []
+
+
+def test_goto_allows_subdomain():
+    fake, safe = make_page()
+    safe.goto("https://secure.booking.com/book.html")
+    assert fake.visited == ["https://secure.booking.com/book.html"]
+
+
+def test_goto_redirect_off_allowlist_is_stopped():
+    _, safe = make_page(redirect_to="https://checkout.razorpay.com/")
+    with pytest.raises(SafetyViolation):
+        safe.goto("https://www.booking.com/hotel/x.html")
+
+
+def test_safe_page_exposes_no_input_methods():
+    _, safe = make_page()
+    for name in ("fill", "type", "press", "keyboard", "evaluate", "check", "select_option", "mouse"):
+        assert not hasattr(safe, name)
+
+
+def test_read_text_and_screenshot(tmp_path):
+    fake, safe = make_page({"#total": FakeElement("₹ 7,906")}, tmp_path=tmp_path)
+    assert safe.read_text("#total") == "₹ 7,906"
+    assert safe.read_text("#absent") is None
+    path = safe.screenshot("room 1/../x")
+    assert path.startswith(str(tmp_path))
+    assert "/../" not in path[len(str(tmp_path)):]
+    assert fake.screenshots == [path]
+
+
+def make_guard():
+    return NetworkGuard(DEFAULT_COMMIT_PATH_PATTERNS)
+
+
+@pytest.mark.parametrize("url", [
+    "https://checkout.razorpay.com/v1/checkout.js",
+    "https://secure.payu.in/_payment",
+    "https://securegw.paytm.in/theia",
+    "https://js.stripe.com/v3",
+    "https://checkoutshopper-live.adyen.com/x",
+    "https://api.juspay.in/x",
+    "https://secure.ccavenue.com/x",
+    "https://pgi.billdesk.com/x",
+    "https://api.cashfree.com/x",
+    "https://api.checkout.com/payments",
+    "https://payments.braintree-api.com/x",
+    "https://www.paypal.com/x",
+])
+def test_guard_blocks_payment_gateways_even_for_get(url):
+    assert make_guard().block_reason(url, "GET")
+
+
+@pytest.mark.parametrize("url", [
+    "https://secure.booking.com/book.html",
+    "https://www.example.com/api/reservation/create",
+    "https://www.example.com/checkout/complete",
+    "https://www.example.com/booking/confirm",
+    "https://www.example.com/payment/init",
+])
+def test_guard_blocks_commit_posts(url):
+    assert make_guard().block_reason(url, "POST")
+
+
+def test_guard_allows_ordinary_traffic():
+    guard = make_guard()
+    assert guard.block_reason("https://www.booking.com/hotel/in/x.html?checkin=2026-10-15", "GET") is None
+    assert guard.block_reason("https://www.booking.com/dml/graphql", "POST") is None
+
+
+def test_extra_payment_hosts_add_to_builtins():
+    guard = NetworkGuard(DEFAULT_COMMIT_PATH_PATTERNS, ["phonepe"])
+    assert guard.block_reason("https://mercury.phonepe.com/x", "GET")
+    assert guard.block_reason("https://api.razorpay.com/x", "GET")
+
+
+def test_handle_aborts_and_logs(caplog):
+    guard = make_guard()
+    blocked = FakeRoute("https://api.razorpay.com/v1/payments?card=4111", "POST")
+    allowed = FakeRoute("https://www.booking.com/hotel/x.html")
+    guard.handle(blocked)
+    guard.handle(allowed)
+    assert blocked.result == "aborted"
+    assert allowed.result == "continued"
+    assert guard.aborted == ["POST https://api.razorpay.com/v1/payments"]
+    assert "4111" not in caplog.text
+    assert "NETWORK GUARD aborted" in caplog.text
+
+
+def test_install_registers_catch_all_route():
+    guard, context = make_guard(), FakeContext()
+    guard.install(context)
+    assert context.routes == [("**/*", guard.handle)]
+    assert guard.installed
+
+
+def test_self_check_refuses_without_guard():
+    with pytest.raises(SafetyViolation):
+        self_check(None)
+    with pytest.raises(SafetyViolation):
+        self_check(make_guard())  # created but never installed
+
+
+def test_self_check_passes_with_installed_guard():
+    guard = make_guard()
+    guard.install(FakeContext())
+    self_check(guard)
+
+
+def test_self_check_refuses_if_booking_allowed(monkeypatch):
+    guard = make_guard()
+    guard.install(FakeContext())
+    monkeypatch.setattr(safety, "BOOKING_ALLOWED", True)
+    with pytest.raises(SafetyViolation):
+        self_check(guard)
+
+
+def test_click_refused_if_booking_allowed(monkeypatch):
+    button = FakeElement("Continue")
+    _, safe = make_page({STEP: button})
+    monkeypatch.setattr(safety, "BOOKING_ALLOWED", True)
+    with pytest.raises(SafetyViolation):
+        safe.click_step(STEP)
+    assert button.clicked == 0

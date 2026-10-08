@@ -1,0 +1,70 @@
+"""Collector driven entirely by per-site config. No site-specific code here."""
+from __future__ import annotations
+
+import logging
+from decimal import Decimal
+
+from ..compare import room_matches
+from ..models import RoomKey, Stay, Summary
+from ..money import MoneyError, parse_money
+from ..safety import SafePage, SelectorMissing
+from .base import Collector, RoomMismatch
+
+log = logging.getLogger(__name__)
+
+
+class GenericCollector(Collector):
+    def quick_scan(self, page: SafePage, stay: Stay) -> dict[str, Decimal]:
+        page.goto(self.site.search_url_for(stay))
+        self.check_blocked(page)
+        prices = {}
+        for room_id, room in self.site.rooms.items():
+            text = page.read_text(room.search_price)
+            try:
+                prices[room_id] = parse_money(text)
+            except MoneyError as exc:
+                log.info("%s %s: no search price (%s)", self.site.key, room_id, exc)
+        return prices
+
+    def deep_check(self, page: SafePage, stay: Stay, room_id: str) -> Summary:
+        room = self.site.rooms[room_id]
+        fields = room.summary
+        page.goto(self.site.search_url_for(stay))
+        self.check_blocked(page)
+        login_state = self.login_state(page)
+        for step in room.steps:
+            page.click_step(step)
+            self.check_blocked(page)
+
+        page.wait_for(fields.ready)
+        screenshot = page.screenshot(f"{room_id}_{stay.checkin.isoformat()}")
+        observed = RoomKey(
+            room=self._required_text(page, fields.room_name),
+            meal_plan=self._required_text(page, fields.meal_plan),
+            cancellation=self._required_text(page, fields.cancellation),
+        )
+        if not room_matches(room.labels, observed):
+            raise RoomMismatch(f"summary shows {observed}, expected {room.labels}")
+
+        summary = Summary(
+            final=parse_money(self._required_text(page, fields.final)),
+            login_state=login_state,
+            screenshot_path=screenshot,
+        )
+        for name in ("room_price", "gst", "fees", "discount"):
+            selector = getattr(fields, name)
+            if selector is None:
+                continue
+            text = page.read_text(selector)
+            if text is None:
+                summary.notes.append(f"{name} not shown")
+                continue
+            setattr(summary, name, parse_money(text))
+        return summary
+
+    @staticmethod
+    def _required_text(page: SafePage, selector: str) -> str:
+        text = page.read_text(selector)
+        if text is None:
+            raise SelectorMissing(f"summary selector not found: {selector}")
+        return text
