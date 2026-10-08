@@ -9,6 +9,7 @@ so a human can confirm them before deleting the prefix in config.
 from __future__ import annotations
 
 from datetime import timedelta
+from pathlib import Path
 
 from .models import Stay
 from .safety import SelectorMissing
@@ -135,8 +136,10 @@ def check_site(cfg, site_key: str, days: int = 14, use_profile: bool = False) ->
                     pass
             shot = page.screenshot(f"check_{site_key}")
             html = page.save_html(f"check_{site_key}")
+            text_file = Path(html).with_suffix(".txt")
+            text_file.write_text(page.body_text(), encoding="utf-8")  # the page text exactly as a guest sees it
             print(f"\n{site.label} - stay {stay.checkin} to {stay.checkout}, {stay.adults} adults")
-            print(f"Screenshot: {shot}\nPage HTML: {html}\n")
+            print(f"Screenshot: {shot}\nPage HTML: {html}\nPage text: {text_file}\n")
             print("What the browser got:")
             for line in diagnose(page):
                 print("  " + line)
