@@ -2,6 +2,7 @@
 
     python -m rate_parity run --config config.yaml [--dry-run] [--only booking_com]
     python -m rate_parity login --config config.yaml   # a human logs in to the OTAs
+    python -m rate_parity check --config config.yaml --site agoda   # read-only selector check
 """
 from __future__ import annotations
 
@@ -47,6 +48,11 @@ def main(argv: list[str] | None = None) -> int:
     run_cmd.add_argument("--only", help="check one OTA key, e.g. booking_com")
     login_cmd = commands.add_parser("login", help="open the agent's browser profile so a human can log in")
     login_cmd.add_argument("--config", required=True)
+    check_cmd = commands.add_parser("check", help="read-only: which selectors does one site's page match?")
+    check_cmd.add_argument("--config", required=True)
+    check_cmd.add_argument("--site", required=True, help="site key, e.g. agoda, makemytrip, booking_com, website")
+    check_cmd.add_argument("--days", type=int, default=14, help="check-in this many days from today")
+    check_cmd.add_argument("--profile", action="store_true", help="use the logged-in agent profile")
     args = parser.parse_args(argv)
 
     load_dotenv()
@@ -57,6 +63,10 @@ def main(argv: list[str] | None = None) -> int:
     except ConfigError as exc:
         print(f"Config error: {exc}", file=sys.stderr)
         return 2
+
+    if args.command == "check":
+        from .checker import check_site
+        return check_site(cfg, args.site, args.days, args.profile)
 
     if args.command == "login":
         from .browser import manual_login
