@@ -217,6 +217,18 @@ class SafePage:
         locator.first.scroll_into_view_if_needed(timeout=self._timeout_ms)
         return True
 
+    def wait_seconds(self, seconds: float) -> None:
+        """Sit still (no clicks, no scrolls), e.g. before a polite second try."""
+        self._page.wait_for_timeout(int(seconds * 1000))
+
+    def save_text(self, name: str) -> str:
+        """Save the visible page text next to the screenshots; returns the path."""
+        self._screenshot_dir.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        path = self._screenshot_dir / re.sub(r"[^A-Za-z0-9_.-]", "_", f"{self._site}_{name}_{stamp}.txt")
+        path.write_text(self.body_text(), encoding="utf-8")
+        return str(path)
+
     def scroll_until_stable(self, selector: str, max_rounds: int = 20, pause_ms: int = 1200) -> int:
         """Scroll down in small steps until the number of `selector` matches stops growing.
 

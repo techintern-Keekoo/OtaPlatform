@@ -259,6 +259,21 @@ def test_load_reloads_once_then_gives_a_clear_reason(tmp_path):
     assert len(fake.visited) == 2  # tried, reloaded once, stopped
 
 
+def test_failed_load_waits_before_retry_and_keeps_what_the_page_showed(tmp_path):
+    from rate_parity.safety import SelectorMissing
+    site = _loading_site()
+    fake = FakePage({"body": FakeElement("Sold Out for your dates")})
+    waits = []
+    fake.wait_for_timeout = waits.append
+    page = SafePage(fake, site.key, site.allowed_domains, site.step_selectors(), tmp_path)
+    with pytest.raises(SelectorMissing, match="page showed: 'Sold Out for your dates'") as err:
+        GenericCollector(site).load(page, STAY)
+    assert 20000 in waits  # polite pause before the second visit
+    assert fake.screenshots and "load_failed_" in fake.screenshots[-1]
+    text_file = str(err.value).rsplit(" and ", 1)[1]
+    assert open(text_file, encoding="utf-8").read() == "Sold Out for your dates"
+
+
 MMT_CARD = ("Deluxe Valley Facing Room\nRoom With Free Cancellation\nFree Cancellation before 19 Oct\n"
             "₹ 4,255\n₹ 2,199\n+₹ 283 Taxes & Fees Per Night\nBOOK NOW\nLogin Now and get this for ₹2,157 or less")
 MMT_PATTERN = r"₹\s*(?P<price>[\d,]+)\s*\+\s*₹\s*(?P<tax>[\d,]+)\s*Taxes\s*&\s*Fees"

@@ -13,6 +13,8 @@ from .base import Collector, RoomMismatch
 
 log = logging.getLogger(__name__)
 
+RETRY_WAIT_S = 20  # seconds to wait before reloading a page whose room list did not appear
+
 
 class GenericCollector(Collector):
     def load(self, page: SafePage, stay: Stay, attempts: int = 2) -> None:
@@ -23,6 +25,8 @@ class GenericCollector(Collector):
         a clear reason instead of reading an empty page.
         """
         for attempt in range(1, attempts + 1):
+            if attempt > 1:
+                page.wait_seconds(RETRY_WAIT_S)  # a quick second visit can get the same empty page
             page.goto(self.site.search_url_for(stay))
             self.check_blocked(page)
             if self.site.scroll_to_load:
@@ -38,7 +42,18 @@ class GenericCollector(Collector):
                 return
             except SelectorMissing:
                 log.warning("%s: room list not loaded (attempt %d of %d)", self.site.key, attempt, attempts)
-        raise SelectorMissing(f"{self.site.label}: room list did not load (tried {attempts} times)")
+        raise SelectorMissing(f"{self.site.label}: room list did not load (tried {attempts} times); "
+                              f"{self._failed_page_evidence(page, stay)}")
+
+    def _failed_page_evidence(self, page: SafePage, stay: Stay) -> str:
+        """Keep what the site showed instead of rooms (sold out? blocked? error?) so a person can see why."""
+        name = f"load_failed_{stay.checkin.isoformat()}"
+        try:
+            shot, text_file = page.screenshot(name), page.save_text(name)
+            seen = " ".join(page.body_text().split())[:160]
+        except Exception as exc:  # the page may be gone; the failure itself is already reported
+            return f"no evidence saved ({type(exc).__name__})"
+        return f"page showed: '{seen}' - see {shot} and {text_file}"
 
     def quick_scan(self, page: SafePage, stay: Stay) -> dict[str, Decimal]:
         self.load(page, stay)
