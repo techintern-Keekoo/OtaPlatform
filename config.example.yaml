@@ -19,13 +19,32 @@ stay:
   nights: 1
   adults: 2
 
-# Canonical rate plans to track. An OTA price is only compared with the
-# website price for the SAME room + meal plan + cancellation policy.
+# Canonical rate plans to track: the website's 5 room categories (eZee, seen
+# 2026-10-08). An OTA price is only compared for the SAME room + meal plan +
+# cancellation policy. "Room only" + "Free cancellation" is the plan every OTA
+# showed for these rooms on 22 Oct (Booking.com "No meal option", MMT/Agoda
+# "Free cancellation"). TODO-confirm with revenue team before go-live.
 rooms:
-  - id: room_1
-    room: "TODO: room name - UNVERIFIED"
-    meal_plan: "TODO: e.g. Breakfast included - UNVERIFIED"
-    cancellation: "TODO: e.g. Free cancellation - UNVERIFIED"
+  - id: standard_garden
+    room: Standard garden view room
+    meal_plan: Room only
+    cancellation: Free cancellation
+  - id: deluxe_valley
+    room: Deluxe valley facing room
+    meal_plan: Room only
+    cancellation: Free cancellation
+  - id: deluxe_mountain
+    room: Deluxe mountain view room
+    meal_plan: Room only
+    cancellation: Free cancellation
+  - id: family_suite
+    room: Family Suite with Mountain View Room
+    meal_plan: Room only
+    cancellation: Free cancellation
+  - id: premium_cottage
+    room: Premium cottage Mountain View Room
+    meal_plan: Room only
+    cancellation: Free cancellation
 
 browser:
   # Dedicated profile directory used ONLY by this agent. A human logs in to
@@ -78,40 +97,56 @@ alerts:
 # Any step whose label reads like pay/confirm/submit/card/upi/wallet is refused.
 # ---------------------------------------------------------------------------
 sites:
+  # Selector values starting "TODO-verify:" are CANDIDATES read from a
+  # Firecrawl scrape (docs/site-findings.md). Check each in the agent's Chrome
+  # (DevTools > Elements), then delete the "TODO-verify: " prefix. The agent
+  # refuses to run while any enabled site still contains "TODO".
+  #
+  # room_template: written once per site; {room} {meal_plan} {cancellation} are
+  # replaced by each room's labels below. Labels are how THAT site words it.
   website:
     label: Keekoo website
     enabled: true
-    # Property website https://zenhotels.in/ -> "Book Now" opens the eZee (Yanolja)
-    # booking engine on book.zenhotels.in (CNAME of live.ipms247.com). Verified
-    # 2026-10-08 with a read-only Firecrawl scrape. Rates there are shown
-    # "Exclusive of Tax".
+    # zenhotels.in "Book Now" -> eZee (Yanolja) engine on book.zenhotels.in
+    # (CNAME of live.ipms247.com). Rates shown "Exclusive of Tax".
     allowed_domains: ["book.zenhotels.in"]
-    # TODO: the engine IGNORED ?checkin=22-10-2026 and ?checkin=2026-10-22&nonights=1
-    # (it always opened on today). Until a date parameter or the eZee rate API is
-    # confirmed, this stays TODO so the agent cannot compare the wrong dates.
+    # TODO: eZee IGNORED ?checkin=22-10-2026 and ?checkin=2026-10-22&nonights=1
+    # (always opened on today). Needs the eZee rate API or a deep-link param.
     search_url: "https://book.zenhotels.in/booking/roomlist-zenmanalibykeekoostays-be?TODO-date-param={checkin}"
-    date_format: "%Y-%m-%d"
+    date_format: "%d-%m-%Y"
     logged_in_marker: null          # website deep check is done as a guest
     login_wall_selectors: []
     captcha_selectors: []
-    block_texts: []                 # extra text that means "blocked"
+    block_texts: []
+    room_template:
+      steps:
+        - "TODO: open this room's 1-night rate plan"
+        - "TODO: Book Now for that plan (leads to summary, not payment)"
+      summary:
+        ready: "TODO: selector only present on the booking summary page"
+        room_name: "TODO"
+        meal_plan: "TODO"
+        cancellation: "TODO"
+        room_price: "TODO"
+        gst: "TODO"
+        fees: null
+        discount: null
+        final: "TODO: total payable incl. taxes"
     rooms:
-      room_1:
-        # labels: optional - how THIS site words room/meal plan/cancellation
-        search_price: "TODO: selector for room_1 price on search page - UNVERIFIED"
-        steps:
-          - "TODO: selector to select room_1 rate plan - UNVERIFIED"
-          - "TODO: selector to continue to booking summary - UNVERIFIED"
-        summary:
-          ready: "TODO: selector only present on the summary page - UNVERIFIED"
-          room_name: "TODO - UNVERIFIED"
-          meal_plan: "TODO - UNVERIFIED"
-          cancellation: "TODO - UNVERIFIED"
-          room_price: "TODO - UNVERIFIED"
-          gst: "TODO - UNVERIFIED"
-          fees: null                  # set to a selector if the page shows fees
-          discount: null              # set to a selector if the page shows a discount
-          final: "TODO: total payable selector - UNVERIFIED"
+      # eZee room-type ids (stable). CAUTION: #roomtype_<id> shows the room's
+      # LOWEST rate, which on 8 Oct was a 3-night-minimum deal (Rs 1,363.44)
+      # while the 1-night rate was Rs 1,468.32. search_price must point at the
+      # 1-night plan, or every check would raise false violations.
+      standard_garden:
+        search_price: "TODO-verify: 1-night plan price for room id 4757200000000000001 (#roomtype_4757200000000000001 = lowest incl. min-stay deals)"
+      deluxe_valley:
+        search_price: "TODO-verify: 1-night plan price for room id 4757200000000000002"
+      deluxe_mountain:
+        search_price: "TODO-verify: 1-night plan price for room id 4757200000000000003"
+      family_suite:
+        search_price: "TODO-verify: 1-night plan price for room id 4757200000000000005"
+      premium_cottage:
+        search_price: "TODO-verify: 1-night plan price for room id 4757200000000000006"
 
   booking_com:
     label: Booking.com
@@ -120,33 +155,43 @@ sites:
     # From the property link; affiliate/session params (aid, label, sid, srpvid, blocks) removed.
     search_url: "https://www.booking.com/hotel/in/keekoo-manali-manali.html?checkin={checkin}&checkout={checkout}&group_adults={adults}&group_children=0&no_rooms=1&req_adults={adults}&req_children=0"
     date_format: "%Y-%m-%d"
-    logged_in_marker: "TODO: selector visible only when logged in - UNVERIFIED"
-    login_wall_selectors: ["TODO: sign-in modal selector - UNVERIFIED"]
-    captcha_selectors: ["TODO: captcha frame selector - UNVERIFIED"]
+    logged_in_marker: "TODO-verify: [data-testid='header-profile']"
+    login_wall_selectors: ["TODO: sign-in modal selector"]
+    captcha_selectors: ["TODO: captcha frame selector"]
     block_texts: []
+    room_template:
+      search_price: "TODO-verify: .hprt-table tr:has(.hprt-roomtype-link:has-text('{room}')) .bui-price-display__value"
+      steps:
+        # BLOCKER: room count is a <select> (agent never sets form values) and
+        # "I'll reserve" submits to /book.html, which the network guard aborts.
+        - "TODO: design a read-only way past room-count select"
+      summary:
+        ready: "TODO: selector only present on the booking summary page"
+        room_name: "TODO"
+        meal_plan: "TODO"
+        cancellation: "TODO"
+        room_price: "TODO"
+        gst: "TODO"
+        fees: null
+        discount: null
+        final: "TODO: total payable incl. taxes"
+    # TODO: Booking.com names its rooms differently. Map each website room to
+    # its Booking.com name (rooms seen 22 Oct: Deluxe Room, Deluxe Double Room,
+    # Double Room with Mountain View, Superior Chalet, Quadruple Room,
+    # Superior Family Room). Do not guess: a wrong match gives false alarms.
     rooms:
-      room_1:
-        labels:
-          room: "TODO: room name as Booking.com shows it - UNVERIFIED"
-          meal_plan: "TODO - UNVERIFIED"
-          cancellation: "TODO - UNVERIFIED"
-        search_price: "TODO - UNVERIFIED"
-        steps:
-          - "TODO: rooms dropdown / select for this rate plan - UNVERIFIED"
-          - "TODO: reserve button that leads to the summary (not pay) - UNVERIFIED"
-        summary:
-          ready: "TODO - UNVERIFIED"
-          room_name: "TODO - UNVERIFIED"
-          meal_plan: "TODO - UNVERIFIED"
-          cancellation: "TODO - UNVERIFIED"
-          room_price: "TODO - UNVERIFIED"
-          gst: "TODO - UNVERIFIED"
-          fees: null
-          discount: null
-          final: "TODO - UNVERIFIED"
+      standard_garden:
+        labels: {room: "TODO", meal_plan: "No meal option", cancellation: "Free cancellation"}
+      deluxe_valley:
+        labels: {room: "TODO", meal_plan: "No meal option", cancellation: "Free cancellation"}
+      deluxe_mountain:
+        labels: {room: "TODO", meal_plan: "No meal option", cancellation: "Free cancellation"}
+      family_suite:
+        labels: {room: "TODO", meal_plan: "No meal option", cancellation: "Free cancellation"}
+      premium_cottage:
+        labels: {room: "TODO", meal_plan: "No meal option", cancellation: "Free cancellation"}
 
-  # Week 2+. URLs come from the property's real listing links (tracking params
-  # removed). Fill rooms/selectors like booking_com, then set enabled: true.
+  # Week 2+. Fill like booking_com, then set enabled: true.
   makemytrip:
     label: MakeMyTrip
     enabled: false
@@ -154,7 +199,34 @@ sites:
     # MMT dates are MMDDYYYY (11082026 = 8 Nov 2026). rsc = rooms e adults e children.
     search_url: "https://www.makemytrip.com/hotels/hotel-details/?hotelId=202004271355036572&_uCurrency=INR&checkin={checkin}&checkout={checkout}&city=CTKUU&country=IN&locusId=CTKUU&locusType=city&roomStayQualifier={adults}e0e&rsc=1e{adults}e0e"
     date_format: "%m%d%Y"
-    rooms: {}
+    room_template:
+      # Room names carry data-testid="rmType__roomName"; prices have no test id
+      # (class .latoBlack.font28 seen; fragile). Tax shown as "+ Rs N taxes & fees".
+      search_price: "TODO-verify: room block containing [data-testid='rmType__roomName'] = '{room}', then its .latoBlack.font28 price"
+      steps:
+        - "TODO-verify: that room's [data-testid$='-selectRoom'] button"
+      summary:
+        ready: "TODO: selector only present on the booking summary page"
+        room_name: "TODO"
+        meal_plan: "TODO"
+        cancellation: "TODO"
+        room_price: "TODO"
+        gst: "TODO"
+        fees: null
+        discount: null
+        final: "TODO: total payable incl. taxes"
+    rooms:
+      standard_garden:
+        labels: {room: "Standard Garden View Room", meal_plan: "TODO: MMT meal wording", cancellation: "Free cancellation"}
+      deluxe_valley:
+        labels: {room: "Deluxe Valley Facing Room", meal_plan: "TODO: MMT meal wording", cancellation: "Free cancellation"}
+      deluxe_mountain:
+        labels: {room: "Deluxe Mountain View Room", meal_plan: "TODO: MMT meal wording", cancellation: "Free cancellation"}
+      family_suite:
+        labels: {room: "Family Suite with Mountain View", meal_plan: "TODO: MMT meal wording", cancellation: "Free cancellation"}
+      premium_cottage:
+        labels: {room: "Premium Cottage Room", meal_plan: "TODO: MMT meal wording", cancellation: "Free cancellation"}
+
   goibibo:
     label: Goibibo
     enabled: false
@@ -162,7 +234,33 @@ sites:
     # roomString = rooms-adults-children
     search_url: "https://www.goibibo.com/hotels/hotel-details/?checkin={checkin}&checkout={checkout}&roomString=1-{adults}-0&locusId=CTKUU&locusType=city&cityCode=CTKUU&cc=IN&_uCurrency=INR&giHotelId=2508145749391752109&mmtId=202004271355036572"
     date_format: "%Y%m%d"
-    rooms: {}
+    # Goibibo blocked the Firecrawl read. It shares MMT's listing (mmtId), so
+    # names are probably MMT's, but that is unverified.
+    room_template:
+      search_price: "TODO"
+      steps: ["TODO"]
+      summary:
+        ready: "TODO: selector only present on the booking summary page"
+        room_name: "TODO"
+        meal_plan: "TODO"
+        cancellation: "TODO"
+        room_price: "TODO"
+        gst: "TODO"
+        fees: null
+        discount: null
+        final: "TODO: total payable incl. taxes"
+    rooms:
+      standard_garden:
+        labels: {room: "TODO", meal_plan: "TODO", cancellation: "Free cancellation"}
+      deluxe_valley:
+        labels: {room: "TODO", meal_plan: "TODO", cancellation: "Free cancellation"}
+      deluxe_mountain:
+        labels: {room: "TODO", meal_plan: "TODO", cancellation: "Free cancellation"}
+      family_suite:
+        labels: {room: "TODO", meal_plan: "TODO", cancellation: "Free cancellation"}
+      premium_cottage:
+        labels: {room: "TODO", meal_plan: "TODO", cancellation: "Free cancellation"}
+
   agoda:
     label: Agoda
     enabled: false
@@ -171,7 +269,38 @@ sites:
     # change both together. finalPriceView=1 asks Agoda to show the total price.
     search_url: "https://www.agoda.com/en-in/zen-manali-by-keekoo-stays/hotel/manali-in.html?checkIn={checkin}&los=1&adults={adults}&children=0&rooms=1&currencyCode=INR&finalPriceView=1"
     date_format: "%Y-%m-%d"
-    rooms: {}
+    logged_in_marker: null
+    login_wall_selectors: []
+    captcha_selectors: []
+    block_texts: []
+    room_template:
+      # Agoda lists a Non-refundable AND a Free Cancellation offer per room;
+      # :has-text('{cancellation}') picks the free-cancellation one.
+      search_price: "TODO-verify: [data-testid='room-item']:has([data-testid='room-name']:text-is('{room}')) [data-testid='room-offer']:has-text('{cancellation}') [data-testid='room-offer-final-price']"
+      steps:
+        - "TODO-verify: [data-testid='room-item']:has([data-testid='room-name']:text-is('{room}')) [data-testid='room-offer']:has-text('{cancellation}') [data-testid='book-button']"
+      summary:
+        ready: "TODO: selector only present on the booking summary page"
+        room_name: "TODO"
+        meal_plan: "TODO"
+        cancellation: "TODO"
+        room_price: "TODO"
+        gst: "TODO"
+        fees: null
+        discount: null
+        final: "TODO: total payable incl. taxes"
+    rooms:
+      standard_garden:
+        labels: {room: "Standard Garden View Room", meal_plan: "TODO: Agoda meal wording", cancellation: "Free Cancellation"}
+      deluxe_valley:
+        labels: {room: "Deluxe Valley View Room", meal_plan: "TODO: Agoda meal wording", cancellation: "Free Cancellation"}
+      deluxe_mountain:
+        labels: {room: "Deluxe Mountain View", meal_plan: "TODO: Agoda meal wording", cancellation: "Free Cancellation"}
+      family_suite:
+        labels: {room: "Family Suite", meal_plan: "TODO: Agoda meal wording", cancellation: "Free Cancellation"}
+      premium_cottage:
+        labels: {room: "Premium Cottage", meal_plan: "TODO: Agoda meal wording", cancellation: "Free Cancellation"}
+
   cleartrip:
     label: Cleartrip
     enabled: false
@@ -179,4 +308,28 @@ sites:
     # c = checkin|checkout as DDMMYY ("|" is %7C), r = adults,children
     search_url: "https://www.cleartrip.com/hotels/details/zen-manali-by-keekoo-stays-4533148?c={checkin}%7C{checkout}&r={adults}%2C0"
     date_format: "%d%m%y"
-    rooms: {}
+    # Cleartrip blocked the Firecrawl read; inspect from the office PC.
+    room_template:
+      search_price: "TODO"
+      steps: ["TODO"]
+      summary:
+        ready: "TODO: selector only present on the booking summary page"
+        room_name: "TODO"
+        meal_plan: "TODO"
+        cancellation: "TODO"
+        room_price: "TODO"
+        gst: "TODO"
+        fees: null
+        discount: null
+        final: "TODO: total payable incl. taxes"
+    rooms:
+      standard_garden:
+        labels: {room: "TODO", meal_plan: "TODO", cancellation: "Free cancellation"}
+      deluxe_valley:
+        labels: {room: "TODO", meal_plan: "TODO", cancellation: "Free cancellation"}
+      deluxe_mountain:
+        labels: {room: "TODO", meal_plan: "TODO", cancellation: "Free cancellation"}
+      family_suite:
+        labels: {room: "TODO", meal_plan: "TODO", cancellation: "Free cancellation"}
+      premium_cottage:
+        labels: {room: "TODO", meal_plan: "TODO", cancellation: "Free cancellation"}

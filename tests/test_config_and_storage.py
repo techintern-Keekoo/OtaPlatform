@@ -143,3 +143,33 @@ def test_search_url_without_checkin_placeholder_is_rejected():
     raw["sites"]["booking_com"]["search_url"] = "https://www.booking.com/hotel/in/keekoo-manali-manali.html"
     with pytest.raises(ConfigError, match="checkin"):
         parse_config(raw, check_placeholders=False)
+
+
+def _raw_with_template(label):
+    import yaml
+    raw = yaml.safe_load(EXAMPLE.read_text(encoding="utf-8"))
+    site = raw["sites"]["agoda"]
+    site["room_template"] = {
+        "search_price": "[data-testid='room-name']:text-is('{room}')",
+        "steps": ["[data-testid='book-button'] >> nth=0 /* {room} */"],
+        "summary": {"ready": "#s", "room_name": "#r", "meal_plan": "#m", "cancellation": "#c", "final": "#f"},
+    }
+    room_id = raw["rooms"][0]["id"]
+    site["rooms"] = {room_id: {"labels": {"room": label, "meal_plan": "Room only", "cancellation": "Free cancellation"}}}
+    return raw, room_id
+
+
+def test_room_template_fills_each_rooms_labels():
+    from rate_parity.config import parse_config
+    raw, room_id = _raw_with_template("Premium Cottage")
+    room = parse_config(raw, check_placeholders=False).sites["agoda"].rooms[room_id]
+    assert room.search_price == "[data-testid='room-name']:text-is('Premium Cottage')"
+    assert room.steps == ("[data-testid='book-button'] >> nth=0 /* Premium Cottage */",)
+    assert room.labels.room == "Premium Cottage"
+
+
+def test_room_template_rejects_quotes_in_labels():
+    from rate_parity.config import parse_config
+    raw, _ = _raw_with_template("Bob's Room')")
+    with pytest.raises(ConfigError, match="quotes"):
+        parse_config(raw, check_placeholders=False)

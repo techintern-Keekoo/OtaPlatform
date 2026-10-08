@@ -31,6 +31,20 @@ Matching is by name only and **needs a human to confirm**. Booking.com uses diff
 | Family Suite with Mountain View Room | Family Suite with Mountain View | Family Suite | ? (Superior Family Room?) |
 | — | Quadruple Room | Quadruple Room | Quadruple Room |
 
+## Website (eZee) room-type IDs, 8 Oct 2026
+
+These were confirmed against the room-list screenshot from Keekoo. The price element `#roomtype_<id>` shows the room's **lowest** rate, which can be a minimum-stay deal.
+
+| Room | eZee id | Headline price (per night, excl. tax) |
+|---|---|---|
+| Standard garden view room | 4757200000000000001 | Rs 1,363.44 (3-night-min deal; the 1-night rate was Rs 1,468.32) |
+| Deluxe valley facing room | 4757200000000000002 | Rs 1,576.38 |
+| Deluxe mountain view room | 4757200000000000003 | Rs 1,917.24 |
+| Family Suite with Mountain View Room | 4757200000000000005 | Rs 2,641.86 |
+| Premium cottage Mountain View Room | 4757200000000000006 | Rs 2,343.51 |
+
+The agent must read the **1-night** plan price, not the headline. Otherwise a website min-stay deal looks cheaper than every OTA, and an OTA that is genuinely cheaper gets missed.
+
 ## Prices seen for 22–23 Oct 2026, 2 adults (search page, before checkout)
 
 These are search-page prices, not checkout finals, so they are **not** parity results.

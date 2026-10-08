@@ -148,8 +148,28 @@ def _summary(data: dict, where: str) -> SummarySelectors:
     return SummarySelectors(**required, **optional)
 
 
-def _site_room(data: dict, where: str, canonical: RoomKey) -> SiteRoom:
+def _fill(value, labels: RoomKey, where: str):
+    """Put this site's room/meal/cancellation wording into a template selector."""
+    if isinstance(value, str):
+        return (value.replace("{room}", labels.room).replace("{meal_plan}", labels.meal_plan)
+                .replace("{cancellation}", labels.cancellation))
+    if isinstance(value, list):
+        return [_fill(v, labels, where) for v in value]
+    if isinstance(value, dict):
+        return {k: _fill(v, labels, where) for k, v in value.items()}
+    return value
+
+
+def _site_room(data: dict, where: str, canonical: RoomKey, template: dict | None = None) -> SiteRoom:
+    if not isinstance(data, dict):
+        raise ConfigError(f"{where} must be a mapping")
     labels = data.get("labels")
+    if template:
+        key = _room_key(labels, f"{where}.labels") if labels else canonical
+        for text in (key.room, key.meal_plan, key.cancellation):
+            if "'" in text or '"' in text or "{" in text:  # would break the selector it is put into
+                raise ConfigError(f"{where}.labels must not contain quotes or braces: {text!r}")
+        data = {**_fill(template, key, where), **data}
     steps = _strings(data, "steps", where)
     if not steps:
         raise ConfigError(f"{where}.steps must list the clicks that reach the summary page")
@@ -171,11 +191,14 @@ def _site(key: str, data: dict, rooms: dict[str, RoomKey]) -> Site:
     if "{checkin}" not in url:  # else every stay would silently get today's price
         raise ConfigError(f"{where}.search_url must contain {{checkin}} so each stay gets its own dates")
     raw_rooms = _get(data, "rooms", where, dict, {})
+    # Optional: selectors written once, with {room} {meal_plan} {cancellation}
+    # replaced by each room's labels on this site. A room may still override any key.
+    template = _get(data, "room_template", where, dict, None)
     site_rooms = {}
     for room_id, room_data in raw_rooms.items():
         if room_id not in rooms:
             raise ConfigError(f"{where}.rooms.{room_id} is not defined in top-level rooms")
-        site_rooms[room_id] = _site_room(room_data, f"{where}.rooms.{room_id}", rooms[room_id])
+        site_rooms[room_id] = _site_room(room_data, f"{where}.rooms.{room_id}", rooms[room_id], template)
     return Site(
         key=key,
         label=_get(data, "label", where, str, key),
