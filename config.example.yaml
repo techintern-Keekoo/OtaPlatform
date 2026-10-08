@@ -42,6 +42,12 @@ network:
   # billdesk, cashfree, checkout.com, braintree, paypal) are ALWAYS blocked.
   # Add more host keywords here; you cannot remove the built-in ones.
   extra_payment_host_keywords: []
+  # EXACT paths of search endpoints checked to be read-only. They skip the
+  # commit_path rule below only; payment hosts and booking-body keywords still
+  # apply. eZee loads its room search with POST /booking/multibox.php
+  # (body: action=destination_list&checkIn=..&isroomsearch=1).
+  readonly_post_paths:
+    - /booking/multibox.php
   # Any non-GET request whose URL path contains one of these is aborted.
   # NOTE: if an OTA reaches its summary page via a POST to one of these paths,
   # the deep check will fail safely (COULD_NOT_CHECK); review before changing.
@@ -75,12 +81,15 @@ sites:
   website:
     label: Keekoo website
     enabled: true
-    # Property website: https://zenhotels.in/ . If its "Book" button hands off to a
-    # booking-engine domain (eZee, STAAH, Simplotel, ...), add that domain here too,
-    # or every check will stop at the allowlist (fails safe).
-    allowed_domains: ["zenhotels.in"]
-    # Placeholders: {checkin} {checkout} (date_format) and {adults}
-    search_url: "https://zenhotels.in/TODO-booking-page?checkin={checkin}&checkout={checkout}&adults={adults}"   # TODO: real booking-page URL - UNVERIFIED
+    # Property website https://zenhotels.in/ -> "Book Now" opens the eZee (Yanolja)
+    # booking engine on book.zenhotels.in (CNAME of live.ipms247.com). Verified
+    # 2026-10-08 with a read-only Firecrawl scrape. Rates there are shown
+    # "Exclusive of Tax".
+    allowed_domains: ["book.zenhotels.in"]
+    # TODO: the engine IGNORED ?checkin=22-10-2026 and ?checkin=2026-10-22&nonights=1
+    # (it always opened on today). Until a date parameter or the eZee rate API is
+    # confirmed, this stays TODO so the agent cannot compare the wrong dates.
+    search_url: "https://book.zenhotels.in/booking/roomlist-zenmanalibykeekoostays-be?TODO-date-param={checkin}"
     date_format: "%Y-%m-%d"
     logged_in_marker: null          # website deep check is done as a guest
     login_wall_selectors: []

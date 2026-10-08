@@ -294,3 +294,16 @@ def test_safe_page_closes_popups(tmp_path):
     popup = FakePage()
     page.handlers["popup"](popup)
     assert popup.closed
+
+
+def test_readonly_post_path_is_exact_and_still_body_checked():
+    guard = NetworkGuard(DEFAULT_COMMIT_PATH_PATTERNS, (), ["/booking/multibox.php"])
+    search = "action=destination_list&checkIn=22-10-2026&isroomsearch=1"
+    assert guard.block_reason("https://book.zenhotels.in/booking/multibox.php", "POST", search) is None
+    # exact match only: neighbours and sub-paths stay blocked
+    assert guard.block_reason("https://book.zenhotels.in/booking/multibox.php/x", "POST", search)
+    assert guard.block_reason("https://book.zenhotels.in/booking/book-rooms", "POST", search)
+    # a booking body on the exempt path is still aborted
+    assert guard.block_reason("https://book.zenhotels.in/booking/multibox.php", "POST", "action=createBooking")
+    # payment hosts are never exempt
+    assert NetworkGuard((), (), ["/v1/payments"]).block_reason("https://api.razorpay.com/v1/payments", "POST")

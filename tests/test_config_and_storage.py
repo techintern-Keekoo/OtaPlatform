@@ -134,3 +134,12 @@ def test_example_ota_urls_match_real_listing_links(site, checkin, expected):
     start = date(*checkin)
     url = load_config(EXAMPLE, check_placeholders=False).sites[site].search_url_for(Stay(start, start + timedelta(days=1), 2))
     assert expected in url
+
+
+def test_search_url_without_checkin_placeholder_is_rejected():
+    import yaml
+    from rate_parity.config import parse_config
+    raw = yaml.safe_load(EXAMPLE.read_text(encoding="utf-8"))
+    raw["sites"]["booking_com"]["search_url"] = "https://www.booking.com/hotel/in/keekoo-manali-manali.html"
+    with pytest.raises(ConfigError, match="checkin"):
+        parse_config(raw, check_placeholders=False)

@@ -22,7 +22,7 @@ class GuardedContext:
     def __init__(self, context, cfg: Config, login_state: str, closers: list):
         self.cfg = cfg
         self.login_state = login_state
-        self.guard = NetworkGuard(cfg.commit_path_patterns, cfg.extra_payment_hosts)
+        self.guard = NetworkGuard(cfg.commit_path_patterns, cfg.extra_payment_hosts, cfg.readonly_post_paths)
         self.guard.install(context)
         context.set_default_timeout(cfg.browser.timeout_ms)
         self._context = context

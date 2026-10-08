@@ -95,7 +95,7 @@ checked_at (ISO time, Asia/Kolkata).
 
 ## Open questions before go-live
 
-- [ ] **Booking engine:** which engine runs the website (https://zenhotels.in/), and what is the booking-page URL and its domain(s)?
+- [x] **Booking engine:** eZee (Yanolja) at `book.zenhotels.in`. Dates cannot be set from the URL; see `docs/site-findings.md`. Still needed: the eZee API key or a deep-link parameter.
 - [ ] **Office PC 24/7:** will a dedicated office PC stay on with Chrome and the logged-in profile? It must not be someone's personal profile.
 - [ ] **WATI API access:** the tenant API URL and token, an approved template name, and the parameter name of the template placeholder.
 - [ ] **Alert recipients:** who gets the daily WhatsApp summary?

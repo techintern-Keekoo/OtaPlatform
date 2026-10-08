@@ -208,9 +208,18 @@ class SafePage:
 class NetworkGuard:
     """Aborts payment-gateway traffic and non-GET booking-commit requests."""
 
-    def __init__(self, commit_path_patterns: Iterable[str], extra_payment_hosts: Iterable[str] = ()):
+    def __init__(
+        self,
+        commit_path_patterns: Iterable[str],
+        extra_payment_hosts: Iterable[str] = (),
+        readonly_post_paths: Iterable[str] = (),
+    ):
         self.payment_hosts = PAYMENT_HOST_KEYWORDS + tuple(h.lower() for h in extra_payment_hosts)
         self.commit_paths = tuple(p.lower() for p in commit_path_patterns)
+        # EXACT paths of search endpoints verified to be read-only (e.g. eZee's
+        # /booking/multibox.php room search). Exempt from the path rule only:
+        # payment hosts and commit-body keywords still apply to them.
+        self.readonly_paths = frozenset(p.lower() for p in readonly_post_paths)
         self.installed = False
         self.aborted: list[str] = []
 
@@ -222,7 +231,7 @@ class NetworkGuard:
                 return f"payment gateway ({keyword})"
         if method.upper() != "GET":
             path = parts.path.lower()
-            for pattern in self.commit_paths:
+            for pattern in () if path in self.readonly_paths else self.commit_paths:
                 if pattern in path:
                     return f"booking-commit request ({pattern})"
             compact = re.sub(r"[^a-z]", "", (body or "").lower())

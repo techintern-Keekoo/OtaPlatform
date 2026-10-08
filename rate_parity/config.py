@@ -93,6 +93,7 @@ class Config:
     browser: BrowserSettings
     commit_path_patterns: tuple[str, ...]
     extra_payment_hosts: tuple[str, ...]
+    readonly_post_paths: tuple[str, ...]
     screenshot_dir: Path
     csv_path: Path
     sheet_worksheet: str
@@ -167,6 +168,8 @@ def _site(key: str, data: dict, rooms: dict[str, RoomKey]) -> Site:
     parts = urlsplit(url.replace("{", "").replace("}", ""))
     if parts.scheme != "https" or not host_allowed(parts.hostname, domains):
         raise ConfigError(f"{where}.search_url must be https and inside allowed_domains")
+    if "{checkin}" not in url:  # else every stay would silently get today's price
+        raise ConfigError(f"{where}.search_url must contain {{checkin}} so each stay gets its own dates")
     raw_rooms = _get(data, "rooms", where, dict, {})
     site_rooms = {}
     for room_id, room_data in raw_rooms.items():
@@ -274,6 +277,7 @@ def parse_config(raw: dict, check_placeholders: bool = True) -> Config:
         browser=browser,
         commit_path_patterns=commit,
         extra_payment_hosts=_strings(network, "extra_payment_host_keywords", "network"),
+        readonly_post_paths=_strings(network, "readonly_post_paths", "network"),
         screenshot_dir=Path(_get(output, "screenshot_dir", "output", str, "screenshots")),
         csv_path=Path(_get(output, "csv_path", "output", str, "output/rate_parity.csv")),
         sheet_worksheet=_get(output, "sheet_worksheet", "output", str, "checks"),
