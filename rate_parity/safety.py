@@ -212,6 +212,23 @@ class SafePage:
         locator.first.scroll_into_view_if_needed(timeout=self._timeout_ms)
         return True
 
+    def scroll_until_stable(self, selector: str, max_rounds: int = 20, pause_ms: int = 1200) -> int:
+        """Scroll down in small steps until the number of `selector` matches stops growing.
+
+        For lists that render one item at a time as you scroll (Agoda rooms).
+        Read-only: mouse wheel only. Returns the final count.
+        """
+        count, unchanged = self.count(selector), 0
+        for _ in range(max_rounds):
+            self._page.mouse.wheel(0, 700)
+            self._page.wait_for_timeout(pause_ms)
+            new = self.count(selector)
+            unchanged = unchanged + 1 if new == count else 0
+            count = new
+            if unchanged >= 3:  # nothing new after three more scrolls: the list is complete
+                break
+        return count
+
     def scroll_through(self, steps: int = 10, pause_ms: int = 600) -> None:
         """Scroll down with the mouse wheel so lazy-loaded room lists appear.
 

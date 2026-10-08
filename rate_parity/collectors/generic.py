@@ -32,6 +32,8 @@ class GenericCollector(Collector):
                 return
             try:
                 page.wait_for(self.site.wait_for)
+                found = page.scroll_until_stable(self.site.wait_for)  # rooms render one by one
+                log.info("%s: %d room boxes loaded", self.site.key, found)
                 return
             except SelectorMissing:
                 log.warning("%s: room list not loaded (attempt %d of %d)", self.site.key, attempt, attempts)

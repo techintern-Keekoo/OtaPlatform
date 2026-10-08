@@ -320,3 +320,19 @@ def test_agoda_booking_form_buttons_are_refused(label):
     # Seen live on Agoda's Booking Form (8 Oct 2026): guest details were pre-filled
     # for a logged-in user and "NEXT: FINAL STEP" leads to payment.
     assert safety.is_denied_label(label)
+
+
+def test_scroll_until_stable_keeps_going_while_rooms_appear(tmp_path):
+    from tests.fakes import FakeLocator
+
+    class GrowingPage(FakePage):
+        """Renders one more room box per scroll, up to 5 (like Agoda)."""
+        def locator(self, selector):
+            loc = FakeLocator(FakeElement("room"))
+            loc.count = lambda: min(1 + self.mouse.wheel_calls, 5)
+            return loc
+
+    fake = GrowingPage()
+    found = SafePage(fake, "agoda", ["agoda.com"], [], tmp_path).scroll_until_stable(".room")
+    assert found == 5
+    assert fake.mouse.wheel_calls == 7  # 4 scrolls to load rooms 2-5, then 3 with nothing new
