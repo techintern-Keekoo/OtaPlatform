@@ -45,6 +45,9 @@ class SiteRoom:
     ezee_room_type: str | None = None  # kind "ezee" only: the engine's RoomTypeUnkId
     # (offer type, selector) tried in order; the first that is on the page wins.
     price_options: tuple[tuple[str, str], ...] = ()
+    # (container selector, regex with (?P<price>) and optional (?P<tax>)): read the room's
+    # card text and pull price + taxes out of it (sites with unlabelled prices, e.g. MMT).
+    price_text: tuple[str, str] | None = None
 
 
 @dataclass(frozen=True)
@@ -184,6 +187,8 @@ def _site_room(data: dict, where: str, canonical: RoomKey, template: dict | None
             if "'" in text or '"' in text or "{" in text:  # would break the selector it is put into
                 raise ConfigError(f"{where}.labels must not contain quotes or braces: {text!r}")
         data = {**_fill(template, key, where), **data}
+    if "price_text" in data:
+        return _text_room(data, where, _room_key(labels, f"{where}.labels") if labels else canonical)
     if "steps" not in data:
         raise ConfigError(f"{where}.steps is required ([] = read the summary fields on the search page, no clicks)")
     steps = _strings(data, "steps", where)
@@ -195,6 +200,19 @@ def _site_room(data: dict, where: str, canonical: RoomKey, template: dict | None
         summary=_summary(_get(data, "summary", where, dict), f"{where}.summary"),
         price_options=options,
     )
+
+
+def _text_room(data: dict, where: str, labels: RoomKey) -> SiteRoom:
+    spec = _get(data, "price_text", where, dict)
+    container = _get(spec, "container", f"{where}.price_text", str)
+    pattern = _get(spec, "pattern", f"{where}.price_text", str)
+    try:
+        compiled = re.compile(pattern)
+    except re.error as exc:
+        raise ConfigError(f"{where}.price_text.pattern is not a valid regex: {exc}") from None
+    if "price" not in compiled.groupindex:
+        raise ConfigError(f"{where}.price_text.pattern needs a (?P<price>...) group")
+    return SiteRoom(labels=labels, search_price=container, steps=(), summary=None, price_text=(container, pattern))
 
 
 def _price_options(value, where: str) -> tuple[tuple[str, str], ...]:

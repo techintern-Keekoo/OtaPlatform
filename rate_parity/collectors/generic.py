@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from decimal import Decimal
 
 from ..compare import room_matches
@@ -43,6 +44,13 @@ class GenericCollector(Collector):
         self.load(page, stay)
         prices, self.offer_types = {}, {}
         for room_id, room in self.site.rooms.items():
+            if room.price_text:
+                found = read_price_text(page, room.price_text)
+                if found:
+                    prices[room_id], _, self.offer_types[room_id] = found
+                else:
+                    log.info("%s %s: no price on page (sold out or not listed?)", self.site.key, room_id)
+                continue
             for offer, selector in room.price_options or (("", room.search_price),):
                 text = page.read_text(selector)
                 if text is None:
@@ -62,6 +70,14 @@ class GenericCollector(Collector):
         fields = room.summary
         self.load(page, stay)
         login_state = self.login_state(page)
+        if room.price_text:  # price AND taxes are on the room card: no clicks needed
+            found = read_price_text(page, room.price_text)
+            if not found or found[1] is None:
+                raise SelectorMissing(f"{self.site.label}: price and taxes not found on the {room_id} card")
+            price, tax, offer = found
+            return Summary(final=price + tax, room_price=price, gst=tax, login_state=login_state,
+                           screenshot_path=page.screenshot(f"{room_id}_{stay.checkin.isoformat()}"),
+                           notes=[f"final = price + taxes & fees, both read from the room card ({offer or 'offer type not shown'})"])
         for step in room.steps:
             page.click_step(step)
             self.check_blocked(page)
@@ -101,3 +117,26 @@ class GenericCollector(Collector):
         if text is None:
             raise SelectorMissing(f"summary selector not found: {selector}")
         return text
+
+
+OFFER_WORDS = (("non-refundable", "non-refundable"), ("free cancellation", "free cancellation"),
+               ("cancellation policy", "cancellation policy"))
+
+
+def read_price_text(page: SafePage, spec: tuple[str, str]):
+    """(price, tax or None, offer type) from a room card's visible text, or None.
+
+    Only numbers that literally appear in the card text are used.
+    """
+    container, pattern = spec
+    text = page.read_text(container)
+    if not text:
+        return None
+    match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
+    if not match:
+        return None
+    price = parse_money(match.group("price"))
+    tax = parse_money(match.group("tax")) if "tax" in match.re.groupindex and match.group("tax") else None
+    lowered = text.casefold()
+    offer = next((name for word, name in OFFER_WORDS if word in lowered), "")
+    return price, tax, offer

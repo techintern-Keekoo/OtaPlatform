@@ -56,8 +56,21 @@ def fields_to_check(site) -> list[tuple[str, str, str | None]]:
 
 
 def report(page, site) -> list[tuple[str, str, str, str]]:
+    from .collectors.generic import read_price_text
     results = []
+    for room_id, room in site.rooms.items():
+        if room.price_text:  # card text + pattern (MakeMyTrip style)
+            try:
+                found = read_price_text(page, room.price_text)
+            except Exception as exc:
+                results.append((room_id, "price (card text)", "ERROR", f"{type(exc).__name__}: {str(exc)[:80]}"))
+                continue
+            detail = (f"price {found[0]} + taxes {found[1]} ({found[2] or 'offer type not shown'})"
+                      if found else "room card or price pattern not found")
+            results.append((room_id, "price (card text)", "OK" if found else "MISSING", detail))
     for room_id, field, selector in fields_to_check(site):
+        if site.rooms.get(room_id) is not None and site.rooms[room_id].price_text:
+            continue
         if field.startswith("step["):  # never click, only check it is there
             sel = candidate(selector)
             status = "TODO" if sel is None else ("OK" if _exists(page, sel) else "MISSING")

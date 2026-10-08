@@ -257,3 +257,24 @@ def test_load_reloads_once_then_gives_a_clear_reason(tmp_path):
     with pytest.raises(SelectorMissing, match="room list did not load"):
         GenericCollector(site).load(page, STAY)
     assert len(fake.visited) == 2  # tried, reloaded once, stopped
+
+
+MMT_CARD = ("Deluxe Valley Facing Room\nRoom With Free Cancellation\nFree Cancellation before 19 Oct\n"
+            "₹ 4,255\n₹ 2,199\n+₹ 283 Taxes & Fees Per Night\nBOOK NOW\nLogin Now and get this for ₹2,157 or less")
+MMT_PATTERN = r"₹\s*(?P<price>[\d,]+)\s*\+\s*₹\s*(?P<tax>[\d,]+)\s*Taxes\s*&\s*Fees"
+
+
+def test_read_price_text_takes_price_before_taxes_not_the_old_price(tmp_path):
+    from rate_parity.collectors.generic import read_price_text
+    page = SafePage(FakePage({"#card": FakeElement(MMT_CARD)}), "makemytrip", ["makemytrip.com"], [], tmp_path)
+    assert read_price_text(page, ("#card", MMT_PATTERN)) == (D("2199"), D("283"), "free cancellation")
+    assert read_price_text(page, ("#missing", MMT_PATTERN)) is None
+
+
+def test_text_room_config_needs_a_price_group():
+    import copy
+    from rate_parity.config import ConfigError
+    raw = copy.deepcopy(RAW)
+    raw["sites"]["booking_com"]["rooms"]["r1"] = {"price_text": {"container": "#card", "pattern": r"₹\s*([\d,]+)"}}
+    with pytest.raises(ConfigError, match="price"):
+        parse_config(raw)

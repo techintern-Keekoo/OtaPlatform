@@ -180,37 +180,38 @@ sites:
     label: MakeMyTrip
     enabled: true
     scroll_to_load: true   # room list loads only after scrolling down
+    wait_for: "[data-testid='rmType__roomName']"   # wait until room names are there
     allowed_domains: ["makemytrip.com"]
     # MMT dates are MMDDYYYY (11082026 = 8 Nov 2026). rsc = rooms e adults e children.
     search_url: "https://www.makemytrip.com/hotels/hotel-details/?hotelId=202004271355036572&_uCurrency=INR&checkin={checkin}&checkout={checkout}&city=CTKUU&country=IN&locusId=CTKUU&locusType=city&roomStayQualifier={adults}e0e&rsc=1e{adults}e0e"
     date_format: "%m%d%Y"
+    logged_in_marker: null
+    login_wall_selectors: []
+    captcha_selectors: []
+    block_texts: []
     room_template:
-      # Room names carry data-testid="rmType__roomName"; prices have no test id
-      # (class .latoBlack.font28 seen; fragile). Tax shown as "+ Rs N taxes & fees".
-      search_price: "TODO-verify: room block containing [data-testid='rmType__roomName'] = '{room}', then its .latoBlack.font28 price"
-      steps:
-        - "TODO-verify: that room's [data-testid$='-selectRoom'] button"
-      summary:
-        ready: "TODO: selector only present on the booking summary page"
-        room_name: "TODO"
-        meal_plan: "TODO"
-        cancellation: "TODO"
-        room_price: "TODO"
-        gst: "TODO"
-        fees: null
-        discount: null
-        final: "TODO: total payable incl. taxes"
+      # MMT labels room names (rmType__roomName) and buttons (*-selectRoom) but
+      # not prices. Each room card's text reads (office PC, 8 Oct 2026):
+      #   Room With Free Cancellation / Free Cancellation before 19 Oct ...
+      #   ₹ 3,680 (old) / ₹ 1,901 / +₹ 245 Taxes & Fees Per Night / BOOK NOW
+      # So: take the innermost box holding this room's name AND its button
+      # (">> nth=-1" = the last one, which skips the "Upgrade to ..." box at the
+      # top that repeats a room name), then read price and taxes from its text.
+      # Taxes are on the card, so the checkout check needs NO clicks.
+      price_text:
+        container: "div:has([data-testid='rmType__roomName']:has-text('{room}')):has([data-testid$='-selectRoom']) >> nth=-1"
+        pattern: "₹\\s*(?P<price>[\\d,]+)\\s*\\+\\s*₹\\s*(?P<tax>[\\d,]+)\\s*Taxes\\s*&\\s*Fees"
     rooms:
       standard_garden:
-        labels: {room: "Standard Garden View Room", meal_plan: "TODO: MMT meal wording", cancellation: "Free cancellation"}
+        labels: {room: "Standard Garden View Room", meal_plan: "Room only", cancellation: "Free cancellation"}
       deluxe_valley:
-        labels: {room: "Deluxe Valley Facing Room", meal_plan: "TODO: MMT meal wording", cancellation: "Free cancellation"}
+        labels: {room: "Deluxe Valley Facing Room", meal_plan: "Room only", cancellation: "Free cancellation"}
       deluxe_mountain:
-        labels: {room: "Deluxe Mountain View Room", meal_plan: "TODO: MMT meal wording", cancellation: "Free cancellation"}
+        labels: {room: "Deluxe Mountain View Room", meal_plan: "Room only", cancellation: "Free cancellation"}
       family_suite:
-        labels: {room: "Family Suite with Mountain View", meal_plan: "TODO: MMT meal wording", cancellation: "Free cancellation"}
+        labels: {room: "Family Suite with Mountain View", meal_plan: "Room only", cancellation: "Free cancellation"}
       premium_cottage:
-        labels: {room: "Premium Cottage Room", meal_plan: "TODO: MMT meal wording", cancellation: "Free cancellation"}
+        labels: {room: "Premium Cottage Room", meal_plan: "Room only", cancellation: "Free cancellation"}
 
   goibibo:
     label: Goibibo
