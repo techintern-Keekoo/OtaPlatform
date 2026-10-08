@@ -65,6 +65,33 @@ def report(page, site) -> list[tuple[str, str, str, str]]:
     return results
 
 
+DIAGNOSTIC_SELECTORS = (
+    "[data-testid='room-item']", "[data-testid='room-name']", "[data-testid='room-offer']",
+    "[data-testid='room-offer-final-price']", "[data-testid='book-button']",
+    "[data-testid*='room']", "[data-element-name*='room']",
+)
+
+
+def diagnose(page) -> list[str]:
+    """What the browser actually got: title, URL, counts and room-name texts."""
+    lines = []
+    for label, get in (("title", page.title), ("url", lambda: page.url)):
+        try:
+            lines.append(f"{label}: {get()[:120]}")
+        except Exception as exc:
+            lines.append(f"{label}: ERROR {type(exc).__name__}")
+    for sel in DIAGNOSTIC_SELECTORS:
+        try:
+            lines.append(f"{page.count(sel):4}  {sel}")
+        except Exception as exc:
+            lines.append(f"ERROR {sel}: {type(exc).__name__}")
+    try:
+        lines.append("room names seen: " + " | ".join(page.texts("[data-testid='room-name']")))
+    except Exception as exc:
+        lines.append(f"room names seen: ERROR {type(exc).__name__}")
+    return lines
+
+
 def _exists(page, selector: str) -> bool:
     try:
         return page.exists(selector)
@@ -107,8 +134,13 @@ def check_site(cfg, site_key: str, days: int = 14, use_profile: bool = False) ->
                 except SelectorMissing:
                     pass
             shot = page.screenshot(f"check_{site_key}")
+            html = page.save_html(f"check_{site_key}")
             print(f"\n{site.label} - stay {stay.checkin} to {stay.checkout}, {stay.adults} adults")
-            print(f"Screenshot: {shot}\n")
+            print(f"Screenshot: {shot}\nPage HTML: {html}\n")
+            print("What the browser got:")
+            for line in diagnose(page):
+                print("  " + line)
+            print()
             for room_id, field, status, detail in report(page, site):
                 print(f"{status:8} {room_id:18} {field:24} {detail}")
             print("\nOK = found (check the text is right, then delete 'TODO-verify: ' in config).")

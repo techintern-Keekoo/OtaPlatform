@@ -27,3 +27,14 @@ def test_report_never_clicks_steps():
     assert any(field.startswith("step[") for _, field, _, _ in rows)
     assert all(status in ("OK", "MISSING", "ERROR", "TODO") for _, _, status, _ in rows)
     assert fake.visited == []  # report itself never navigates or clicks
+
+
+def test_diagnose_reports_title_counts_and_room_names(tmp_path):
+    from rate_parity.checker import diagnose
+    fake = FakePage({"[data-testid='room-name']": FakeElement("Premium Cottage")}, url="https://www.agoda.com/x")
+    page = SafePage(fake, "agoda", ["agoda.com"], [], tmp_path)
+    lines = diagnose(page)
+    assert lines[0] == "title: Fake page" and lines[1] == "url: https://www.agoda.com/x"
+    assert any(l.strip().startswith("1  [data-testid='room-name']") for l in lines)
+    assert lines[-1] == "room names seen: Premium Cottage"
+    assert page.save_html("check").endswith(".html")

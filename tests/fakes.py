@@ -41,6 +41,9 @@ class FakeLocator:
     def count(self):
         return 0 if self.element is None else 1
 
+    def all_inner_texts(self):
+        return [] if self.element is None else [self.element.text]
+
 
 class MissingElement:
     def wait_for(self, state=None, timeout=None):
@@ -68,6 +71,12 @@ class FakePage:
 
     def wait_for_timeout(self, ms):
         pass
+
+    def title(self):
+        return "Fake page"
+
+    def content(self):
+        return "<html></html>"
 
     def on(self, event, handler):
         self.handlers[event] = handler

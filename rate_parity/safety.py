@@ -182,6 +182,27 @@ class SafePage:
         self._page.wait_for_load_state("domcontentloaded", timeout=self._timeout_ms)
         check_url_allowed(self._page.url, self._domains)
 
+    def count(self, selector: str) -> int:
+        return self._page.locator(selector).count()
+
+    def texts(self, selector: str, limit: int = 12) -> list[str]:
+        return [" ".join(t.split())[:60] for t in self._page.locator(selector).all_inner_texts()[:limit]]
+
+    def title(self) -> str:
+        return self._page.title()
+
+    @property
+    def url(self) -> str:
+        return self._page.url
+
+    def save_html(self, name: str) -> str:
+        """Save the page's HTML next to the screenshots (for debugging selectors)."""
+        self._screenshot_dir.mkdir(parents=True, exist_ok=True)
+        safe_name = re.sub(r"[^A-Za-z0-9_.-]", "_", f"{self._site}_{name}")
+        path = self._screenshot_dir / f"{safe_name}.html"
+        path.write_text(self._page.content(), encoding="utf-8")
+        return str(path)
+
     def scroll_through(self, steps: int = 10, pause_ms: int = 600) -> None:
         """Scroll down with the mouse wheel so lazy-loaded room lists appear.
 
