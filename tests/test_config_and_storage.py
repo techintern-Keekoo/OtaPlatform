@@ -22,7 +22,7 @@ def test_example_config_parses():
 def test_otas_with_todos_are_not_set_up_but_run_continues():
     cfg = load_config(EXAMPLE)  # website has no TODOs, so this loads
     assert cfg.website.ready
-    assert [s.key for s in cfg.otas() if not s.ready] == ["booking_com", "makemytrip", "goibibo", "cleartrip"]
+    assert [s.key for s in cfg.otas() if not s.ready] == ["booking_com", "goibibo", "cleartrip"]
 
 
 def test_website_with_todos_refuses_to_run(tmp_path):
