@@ -28,7 +28,7 @@ def site(domain, **extra):
 
 RAW = {
     "property": {"name": "Keekoo Test"},
-    "tolerance_pct": 1,
+    "min_margin_pct": 1,
     "stay": {"days_ahead": [7], "nights": 1, "adults": 2},
     "rooms": [{"id": "r1", "room": "Deluxe", "meal_plan": "Breakfast", "cancellation": "Free cancellation"}],
     "browser": {"profile_dir": "chrome-profile", "delay_seconds": [0, 0]},
@@ -132,12 +132,12 @@ def test_violation(check):
 
 
 def test_false_alarm(check, monkeypatch):
-    monkeypatch.setattr(FakeCollector, "ota_final", D("10100"))
+    monkeypatch.setattr(FakeCollector, "ota_final", D("10200"))  # 2% above Zen, margin is 1%
     assert check().status is Status.FALSE_ALARM
 
 
 def test_not_suspect_skips_deep_check(check, monkeypatch):
-    monkeypatch.setattr(FakeCollector, "ota_search", D("10000"))
+    monkeypatch.setattr(FakeCollector, "ota_search", D("10200"))  # above Zen by more than the 1% margin
     row = check()
     assert row.status is Status.IN_PARITY and row.final_payable is None
     assert row.login_state == "logged_out"

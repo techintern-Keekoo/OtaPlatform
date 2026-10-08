@@ -16,5 +16,10 @@ def send_daily_summary(rows: list[CheckRow], cfg: Config, day: date, dry_run: bo
     if dry_run:
         log.info("[dry-run] WhatsApp summary not sent: %s", text)
         return text
-    wati.send_summary(text, wati.load_settings(), cfg.alert_param_name)
+    try:
+        settings = wati.load_settings()
+    except ValueError as exc:  # WATI not set up yet: results are still saved
+        log.warning("WhatsApp summary skipped: %s", exc)
+        return text
+    wati.send_summary(text, settings, cfg.alert_param_name)
     return text

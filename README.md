@@ -7,7 +7,7 @@ Goibibo, Agoda, Cleartrip) than on Keekoo's own website, and reports once a day.
 
 1. **Quick scan.** Opens a fresh, logged-out browser and reads the search-page
    price for each tracked room on the website and each enabled OTA. If an OTA
-   price is below the website price, that room is a **suspect**.
+   price is not above the website (Zen) price, that room is a **suspect**.
 2. **Deep check (suspects only).** Uses a dedicated Chrome profile that a human
    has already logged in to. It opens the same room, clicks through to the
    booking **summary** page, and reads room price, GST, fees, discount and the
@@ -16,11 +16,13 @@ Goibibo, Agoda, Cleartrip) than on Keekoo's own website, and reports once a day.
    website.
 3. **Compare.** `gap% = (ota_final - website_final) / website_final`. Prices are
    compared only when the room, meal plan and cancellation policy all match.
-   - `VIOLATION`: the OTA is cheaper by more than `tolerance_pct`.
-   - `FALSE_ALARM`: the room was a suspect in step 1 but is not cheaper (beyond tolerance) at checkout.
-   - `IN_PARITY`: the OTA search price was not below the website's.
+   Keekoo's rule: **Zen (the website) must be cheaper than every OTA.**
+   - `VIOLATION`: the OTA final is equal to or below Zen's final (or not above it by more than `min_margin_pct`, default 0).
+   - `FALSE_ALARM`: the room was a suspect in step 1 but the OTA is more expensive at checkout.
+   - `IN_PARITY`: the OTA search price was above Zen's.
    - `COULD_NOT_CHECK`: login wall, CAPTCHA, missing selector, room mismatch or another error. The note says what to do, for example "re-login to Booking.com" or "verify manually".
-4. **Report.** Rows go to Google Sheets. If Sheets fails or is not configured,
+4. **Report.** After every run a table of every room x every OTA next to Zen is
+   printed and saved as `output/report_<date>_<time>.txt`. Rows go to Google Sheets. If Sheets fails or is not configured,
    they go to a local CSV file. One WhatsApp summary is sent each day through
    a WATI template message.
 
@@ -93,6 +95,18 @@ adults, login_state, search_price, checkout_room_price, gst, fees, discount,
 final_payable, website_final, gap_pct, status, note, screenshot_path, and
 checked_at (ISO time, Asia/Kolkata).
 
+## Daily schedule (Windows)
+
+Runs 3 times a day: **10:00, 18:00 and 22:00** (the PC's clock, keep it on IST).
+
+1. Set up the project once (`.venv`, `pip install -r requirements.txt`).
+2. Double-click `scripts\install_schedule.bat`. It creates 3 Windows Task Scheduler tasks.
+3. The PC must be on and you must be logged in at those times. The OTA check uses a visible Chrome window.
+4. Results go to `output\`: `rate_parity.csv` (every check), `report_*.txt` (the price table per run) and `agent.log`.
+5. To stop it, double-click `scripts\uninstall_schedule.bat`.
+
+An OTA that still has `TODO` in the config shows as "not set up" in the table and is never opened, so the website and the ready OTAs keep running. Use `python -m rate_parity check --config config.yaml --site <key>` to verify an OTA's selectors.
+
 ## Open questions before go-live
 
 - [x] **Booking engine:** eZee (Yanolja) at `book.zenhotels.in`. Dates cannot be set from the URL; see `docs/site-findings.md`. Still needed: the eZee API key or a deep-link parameter.
@@ -104,4 +118,4 @@ checked_at (ISO time, Asia/Kolkata).
 - [x] **Links:** the OTA listing links (Booking.com, MakeMyTrip, Goibibo, Agoda, Cleartrip) are in `config.example.yaml`. The website booking-page link is still TODO.
 - [x] **OTAs:** Booking.com, MakeMyTrip, Goibibo, Agoda and Cleartrip. Expedia was removed because it was not in the list provided; say if it should come back.
 - [ ] **Selectors:** inspect each live page from the office PC and fill in the `TODO` selectors. The cloud build machine could not reach these sites.
-- [ ] **Tolerance:** what tolerance % does management want? The example uses 1.0, which is a placeholder.
+- [x] **Rule:** Zen must be cheaper than every OTA (`min_margin_pct: 0`). Checks tonight and tomorrow night (`days_ahead: [0, 1]`).

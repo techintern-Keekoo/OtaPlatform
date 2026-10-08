@@ -54,6 +54,7 @@ class CheckRow:
     adults: int
     login_state: str = ""
     search_price: Decimal | None = None
+    website_search_price: Decimal | None = None
     checkout_room_price: Decimal | None = None
     gst: Decimal | None = None
     fees: Decimal | None = None

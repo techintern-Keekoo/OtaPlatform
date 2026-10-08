@@ -28,26 +28,44 @@ def test_floats_are_rejected():
         is_suspect(D("1"), 2)
 
 
-def test_is_suspect_only_when_strictly_cheaper():
+ZERO = D("0")
+
+
+def test_suspect_when_ota_not_above_zen():
+    # Keekoo's rule: Zen must be cheaper, so an equal OTA price is already suspect
     assert is_suspect(D("99"), D("100"))
-    assert not is_suspect(D("100"), D("100"))
+    assert is_suspect(D("100"), D("100"))
     assert not is_suspect(D("101"), D("100"))
 
 
-def test_violation_beyond_tolerance():
-    assert decide_status(D("9800"), D("10000"), TOL) is Status.VIOLATION
+def test_suspect_margin_widens_the_net():
+    assert is_suspect(D("101"), D("100"), D("1"))      # only 1% above Zen
+    assert not is_suspect(D("101.5"), D("100"), D("1"))
 
 
-def test_exactly_at_tolerance_is_not_a_violation():
-    assert decide_status(D("9900"), D("10000"), TOL) is Status.FALSE_ALARM
+def test_ota_cheaper_than_zen_is_violation():
+    assert decide_status(D("9800"), D("10000"), ZERO) is Status.VIOLATION
+
+
+def test_ota_equal_to_zen_is_violation():
+    assert decide_status(D("10000"), D("10000"), ZERO) is Status.VIOLATION
+
+
+def test_ota_above_zen_is_fine():
+    assert decide_status(D("10001"), D("10000"), ZERO) is Status.FALSE_ALARM
+
+
+def test_margin_flags_ota_only_slightly_above_zen():
+    assert decide_status(D("10100"), D("10000"), TOL) is Status.VIOLATION   # +1.00%, not more than 1%
+    assert decide_status(D("10101"), D("10000"), TOL) is Status.FALSE_ALARM  # +1.01%
 
 
 def test_unrounded_gap_is_used():
-    # -1.004% rounds to -1.00 but is still beyond a 1% tolerance
-    assert decide_status(D("9899.6"), D("10000"), TOL) is Status.VIOLATION
+    # +1.004% rounds to +1.00 but is above a 1% margin, so it is fine
+    assert decide_status(D("10100.4"), D("10000"), TOL) is Status.FALSE_ALARM
 
 
-def test_suspect_not_cheaper_at_checkout_is_false_alarm():
+def test_suspect_fine_at_checkout_is_false_alarm():
     assert decide_status(D("10200"), D("10000"), TOL, suspect=True) is Status.FALSE_ALARM
 
 

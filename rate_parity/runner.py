@@ -9,7 +9,7 @@ import logging
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from . import alerts, browser, storage
+from . import alerts, browser, report, storage
 from .collectors import make_collector
 from .compare import decide_status, gap_pct, is_suspect
 from .config import Config, Site
@@ -82,7 +82,10 @@ class StayCheck:
         return self._web_summaries[room_id]
 
     def check_ota(self, ota: Site) -> list[CheckRow]:
-        prices, note = _attempt(self.quick, ota, lambda c, p: c.quick_scan(p, self.stay))
+        if not ota.ready:
+            prices, note = None, "not set up yet (selectors still TODO in config)"
+        else:
+            prices, note = _attempt(self.quick, ota, lambda c, p: c.quick_scan(p, self.stay))
         return [self._check_room(ota, room_id, prices, note) for room_id in ota.rooms]
 
     def _check_room(self, ota: Site, room_id: str, ota_prices, ota_note: str) -> CheckRow:
@@ -94,13 +97,17 @@ class StayCheck:
             adults=self.stay.adults, login_state=self.quick.login_state,
         )
         web_search = (self.web_prices or {}).get(room_id)
+        row.website_search_price = web_search
         row.search_price = (ota_prices or {}).get(room_id)
+        if web_search is not None and not getattr(self.web_collector, "needs_browser", True):
+            web, _ = self.website_summary(room_id)  # eZee: same cached search, no extra request
+            row.website_final = web.final if web else None
         if web_search is None:
             return _finish(row, Status.COULD_NOT_CHECK, self.web_note or "website search price not found")
         if row.search_price is None:
             return _finish(row, Status.COULD_NOT_CHECK, ota_note or "OTA search price not found (sold out or selector)")
-        if not is_suspect(row.search_price, web_search):
-            return _finish(row, Status.IN_PARITY, "search price not below website")
+        if not is_suspect(row.search_price, web_search, self.cfg.min_margin_pct):
+            return _finish(row, Status.IN_PARITY, "OTA search price above Zen")
 
         web, web_note = self.website_summary(room_id)
         if web is None or web.final <= 0:
@@ -115,7 +122,7 @@ class StayCheck:
         row.fees, row.discount, row.final_payable = summary.fees, summary.discount, summary.final
         row.screenshot_path = summary.screenshot_path
         row.gap_pct = gap_pct(summary.final, web.final)
-        status = decide_status(summary.final, web.final, self.cfg.tolerance_pct, suspect=True)
+        status = decide_status(summary.final, web.final, self.cfg.min_margin_pct, suspect=True)
         notes = summary.notes + [f"website screenshot: {web.screenshot_path}"]
         return _finish(row, status, "; ".join(notes))
 
@@ -135,10 +142,22 @@ def check_all(cfg: Config, quick, deep, only: str | None = None) -> list[CheckRo
     return rows
 
 
-def run(cfg: Config, only: str | None = None, dry_run: bool = False) -> list[CheckRow]:
-    from playwright.sync_api import sync_playwright  # imported here so tests need no browser
+class NoBrowser:
+    """Stand-in when no OTA is ready: the website (eZee) needs no browser."""
+    login_state = "not opened"
 
-    cfg.otas(only)  # validate --only before opening a browser
+    def new_safe_page(self, site):
+        raise RuntimeError(f"{site.key} needs a browser but none was opened")
+
+
+def run(cfg: Config, only: str | None = None, dry_run: bool = False) -> list[CheckRow]:
+    otas = cfg.otas(only)  # validate --only before opening a browser
+    if not any(site.ready for site in otas) and cfg.website.kind == "ezee":
+        log.info("no OTA is set up yet: checking the website only, no browser")
+        rows = check_all(cfg, NoBrowser(), NoBrowser(), only)
+        return _store_and_report(cfg, rows, dry_run)
+
+    from playwright.sync_api import sync_playwright  # imported here so tests need no browser
     with sync_playwright() as pw:
         quick = browser.open_quick_context(pw, cfg)
         try:
@@ -152,7 +171,16 @@ def run(cfg: Config, only: str | None = None, dry_run: bool = False) -> list[Che
         finally:
             quick.close()
 
+    return _store_and_report(cfg, rows, dry_run)
+
+
+def _store_and_report(cfg: Config, rows: list[CheckRow], dry_run: bool) -> list[CheckRow]:
     destination = storage.save_rows(rows, cfg, dry_run)
     log.info("saved %d rows to %s", len(rows), destination)
-    alerts.send_daily_summary(rows, cfg, now_ist().date(), dry_run)
+    when = now_ist()
+    table = report.build_table(rows, when)
+    path = report.save_table(table, cfg.csv_path.parent, when)
+    print(table)
+    log.info("price table saved to %s", path)
+    alerts.send_daily_summary(rows, cfg, when.date(), dry_run)
     return rows

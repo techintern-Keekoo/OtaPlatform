@@ -4,6 +4,7 @@ Secrets are never read from here; they come from the environment (.env).
 """
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
@@ -57,6 +58,7 @@ class Site:
     block_texts: tuple[str, ...]
     rooms: dict[str, SiteRoom]
     kind: str = "browser"  # "browser" (Playwright + selectors) or "ezee" (website search, no browser)
+    ready: bool = True  # False: still has TODOs; reported as "not set up", never opened
     ezee_hotel: str | None = None
 
     def search_url_for(self, stay: Stay) -> str:
@@ -89,7 +91,7 @@ class BrowserSettings:
 @dataclass(frozen=True)
 class Config:
     property_name: str
-    tolerance_pct: Decimal
+    min_margin_pct: Decimal
     stay: StayPlan
     rooms: dict[str, RoomKey]
     sites: dict[str, Site]
@@ -258,16 +260,29 @@ def _find_todos(value, path: str):
             yield from _find_todos(v, f"{path}[{i}]")
 
 
-def _check_placeholders(raw: dict) -> None:
-    active = dict(raw)
+def _check_placeholders(raw: dict) -> set[str]:
+    """Raise if the website or shared settings still have TODOs.
+
+    Returns the enabled OTA keys that still have TODOs: those are skipped and
+    reported as "not set up", so the other sites can run meanwhile.
+    """
     sites = raw.get("sites")
     if not isinstance(sites, dict):
         raise ConfigError("config.sites must be a mapping")
-    # A malformed (non-mapping) site is kept so _site() reports it clearly later.
-    active["sites"] = {k: v for k, v in sites.items() if not isinstance(v, dict) or v.get("enabled")}
-    todos = list(_find_todos(active, "config"))
+    shared = {k: v for k, v in raw.items() if k != "sites"}
+    todos = list(_find_todos(shared, "config"))
+    not_ready = set()
+    for key, site in sites.items():
+        if not isinstance(site, dict) or not site.get("enabled"):
+            continue  # a malformed site is reported clearly by _site() later
+        site_todos = list(_find_todos(site, f"config.sites.{key}"))
+        if site_todos and key == "website":
+            todos += site_todos
+        elif site_todos:
+            not_ready.add(key)
     if todos:
         raise ConfigError("unfilled TODO placeholders: " + ", ".join(todos))
+    return not_ready
 
 
 def _validate_sites(sites: dict[str, Site]) -> None:
@@ -285,8 +300,7 @@ def _validate_sites(sites: dict[str, Site]) -> None:
 def parse_config(raw: dict, check_placeholders: bool = True) -> Config:
     if not isinstance(raw, dict):
         raise ConfigError("config file must be a YAML mapping")
-    if check_placeholders:
-        _check_placeholders(raw)
+    not_ready = _check_placeholders(raw) if check_placeholders else set()
 
     rooms = {}
     for i, item in enumerate(_get(raw, "rooms", "config", list)):
@@ -294,6 +308,8 @@ def parse_config(raw: dict, check_placeholders: bool = True) -> Config:
         rooms[room_id] = _room_key(item, f"rooms[{i}]")
 
     sites = {k: _site(k, v, rooms) for k, v in _get(raw, "sites", "config", dict).items()}
+    for key in not_ready:
+        sites[key] = dataclasses.replace(sites[key], ready=False)
     _validate_sites(sites)
 
     stay = _get(raw, "stay", "config", dict)
@@ -315,9 +331,11 @@ def parse_config(raw: dict, check_placeholders: bool = True) -> Config:
         delay_seconds=(float(delay[0]), float(delay[1])),
     )
 
-    tolerance = _get(raw, "tolerance_pct", "config", (int, float))
+    if "tolerance_pct" in raw:
+        raise ConfigError("tolerance_pct was renamed to min_margin_pct (Zen must be cheaper than the OTA)")
+    tolerance = _get(raw, "min_margin_pct", "config", (int, float))
     if isinstance(tolerance, bool) or tolerance < 0:
-        raise ConfigError("tolerance_pct must be a number >= 0")
+        raise ConfigError("min_margin_pct must be a number >= 0")
 
     network = _get(raw, "network", "config", dict, {})
     commit = _strings(network, "commit_path_patterns", "network") or DEFAULT_COMMIT_PATH_PATTERNS
@@ -326,7 +344,7 @@ def parse_config(raw: dict, check_placeholders: bool = True) -> Config:
 
     return Config(
         property_name=_get(_get(raw, "property", "config", dict), "name", "property", str),
-        tolerance_pct=Decimal(str(tolerance)),
+        min_margin_pct=Decimal(str(tolerance)),
         stay=StayPlan(days, nights, adults),
         rooms=rooms,
         sites=sites,

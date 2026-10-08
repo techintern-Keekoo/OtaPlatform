@@ -57,7 +57,7 @@ class FakeSession:
 
 RAW = {
     "property": {"name": "Zen Manali"},
-    "tolerance_pct": 2,
+    "min_margin_pct": 0,
     "stay": {"days_ahead": [14], "nights": 1, "adults": 2},
     "rooms": [
         {"id": "standard", "room": "Standard garden view room", "meal_plan": "Room only", "cancellation": "Free cancellation"},

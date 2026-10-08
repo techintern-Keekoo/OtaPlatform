@@ -37,10 +37,10 @@ def _require_decimal(*values: Decimal) -> None:
             raise TypeError(f"expected Decimal, got {type(value).__name__}")
 
 
-def is_suspect(ota_search: Decimal, website_search: Decimal) -> bool:
-    """Stage 1: the OTA search price is strictly below the website's."""
-    _require_decimal(ota_search, website_search)
-    return ota_search < website_search
+def is_suspect(ota_search: Decimal, website_search: Decimal, min_margin_pct: Decimal = Decimal(0)) -> bool:
+    """Stage 1: the OTA search price is NOT above the website's by more than the margin."""
+    _require_decimal(ota_search, website_search, min_margin_pct)
+    return ota_search <= website_search * (1 + min_margin_pct / _HUNDRED)
 
 
 def _raw_gap_pct(ota_final: Decimal, website_final: Decimal) -> Decimal:
@@ -58,16 +58,18 @@ def gap_pct(ota_final: Decimal, website_final: Decimal) -> Decimal:
 def decide_status(
     ota_final: Decimal | None,
     website_final: Decimal | None,
-    tolerance_pct: Decimal,
+    min_margin_pct: Decimal,
     suspect: bool = True,
 ) -> Status:
-    """VIOLATION if the OTA is cheaper by MORE than tolerance_pct.
+    """Keekoo's rule: the website (Zen) must be CHEAPER than every OTA.
 
-    A suspect that is not a violation at checkout is a FALSE_ALARM.
+    VIOLATION if the OTA final is not above the website final by more than
+    min_margin_pct (0 = any OTA price equal to or below Zen's is a violation).
+    A suspect that turns out fine at checkout is a FALSE_ALARM.
     """
     if ota_final is None or website_final is None:
         return Status.COULD_NOT_CHECK
-    _require_decimal(tolerance_pct)
-    if _raw_gap_pct(ota_final, website_final) < -tolerance_pct:
+    _require_decimal(min_margin_pct)
+    if _raw_gap_pct(ota_final, website_final) <= min_margin_pct:
         return Status.VIOLATION
     return Status.FALSE_ALARM if suspect else Status.IN_PARITY

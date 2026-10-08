@@ -13,14 +13,33 @@ EXAMPLE = Path(__file__).resolve().parent.parent / "config.example.yaml"
 def test_example_config_parses():
     cfg = load_config(EXAMPLE, check_placeholders=False)
     assert cfg.website.enabled
-    assert [s.key for s in cfg.otas()] == ["booking_com"]
-    assert cfg.tolerance_pct == D("1.0")
+    assert [s.key for s in cfg.otas()] == ["booking_com", "makemytrip", "goibibo", "agoda", "cleartrip"]
+    assert cfg.min_margin_pct == D("0")
+    assert cfg.stay.days_ahead == (0, 1)
     assert "/book" in cfg.commit_path_patterns
 
 
-def test_example_config_refuses_to_run_with_todos():
-    with pytest.raises(ConfigError, match="TODO"):
-        load_config(EXAMPLE)
+def test_otas_with_todos_are_not_set_up_but_run_continues():
+    cfg = load_config(EXAMPLE)  # website has no TODOs, so this loads
+    assert cfg.website.ready
+    assert [s.key for s in cfg.otas() if not s.ready] == ["booking_com", "makemytrip", "goibibo", "agoda", "cleartrip"]
+
+
+def test_website_with_todos_refuses_to_run(tmp_path):
+    text = EXAMPLE.read_text(encoding="utf-8").replace("ezee_hotel: zenmanalibykeekoostays", "ezee_hotel: TODO")
+    bad = tmp_path / "config.yaml"
+    bad.write_text(text, encoding="utf-8")
+    with pytest.raises(ConfigError, match="sites.website"):
+        load_config(bad)
+
+
+def test_old_tolerance_key_is_rejected_with_a_clear_message():
+    import yaml
+    from rate_parity.config import parse_config
+    raw = yaml.safe_load(EXAMPLE.read_text(encoding="utf-8"))
+    raw["tolerance_pct"] = 1
+    with pytest.raises(ConfigError, match="min_margin_pct"):
+        parse_config(raw, check_placeholders=False)
 
 
 def test_only_must_be_an_ota():
@@ -82,8 +101,8 @@ def test_malformed_site_is_a_config_error_not_a_crash():
 def test_tolerance_must_be_a_non_negative_number(tolerance):
     from rate_parity.config import parse_config
     raw = _raw_example()
-    raw["tolerance_pct"] = tolerance
-    with pytest.raises(ConfigError, match="tolerance_pct"):
+    raw["min_margin_pct"] = tolerance
+    with pytest.raises(ConfigError, match="min_margin_pct"):
         parse_config(raw, check_placeholders=False)
 
 
