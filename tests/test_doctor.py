@@ -525,3 +525,28 @@ def test_cli_alert_test_command(tmp_path, monkeypatch, posts, capsys):
     assert cli.main(["alert-test", "--config", EXAMPLE, "--to", "919833333333"]) == 0
     assert "sent to 1 of 1" in capsys.readouterr().out
     assert [kw["params"]["whatsappNumber"] for _, kw in posts] == ["919833333333"]
+
+
+# --- Windows scripts --------------------------------------------------------------------------
+
+SCRIPTS = ROOT / "scripts"
+
+
+def test_uninstall_removes_the_tasks_install_creates():
+    removed = doctor.schedule_task_names(SCRIPTS / "uninstall_schedule.bat")
+    assert removed == doctor.schedule_task_names() == doctor.DEFAULT_TASKS
+
+
+def test_run_agent_rotates_log_and_passes_exit_code_on():
+    text = (SCRIPTS / "run_agent.bat").read_text(encoding="ascii")
+    assert "GTR 5242880 move /Y output\\agent.log output\\agent.log.1" in text
+    assert "python -m rate_parity run --config config.example.yaml >> output\\agent.log 2>&1" in text
+    assert text.rstrip().splitlines()[-1] == "exit /b %RESULT%"
+    assert "set RESULT=%ERRORLEVEL%" in text
+
+
+def test_doctor_bat_runs_doctor_and_pauses():
+    text = (SCRIPTS / "doctor.bat").read_text(encoding="ascii")
+    assert "call .venv\\Scripts\\activate.bat" in text
+    assert "python -m rate_parity doctor --config config.example.yaml" in text
+    assert "pause" in text
