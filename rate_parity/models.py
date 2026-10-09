@@ -14,6 +14,10 @@ class Status(str, Enum):
     COULD_NOT_CHECK = "COULD_NOT_CHECK"
 
 
+# Note prefix for rows of a site whose page loaded but where no room price was read.
+SITE_BROKEN = "SITE BROKEN?"
+
+
 @dataclass(frozen=True)
 class RoomKey:
     """A rate plan is only comparable if all three parts match."""

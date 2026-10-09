@@ -6,7 +6,7 @@ import random
 import time
 
 from .config import Config, Site
-from .safety import NetworkGuard, SafePage
+from .safety import Blocked, NetworkGuard, SafePage, self_check
 
 log = logging.getLogger(__name__)
 
@@ -53,6 +53,57 @@ class GuardedContext:
                 close()
             except Exception as exc:  # closing must never hide the real error
                 log.warning("error while closing browser: %s", exc)
+
+
+PROFILE_UNAVAILABLE = "agent profile could not open (close any Chrome using chrome-profile)"
+
+
+class LazyContext:
+    """Opens a context (the logged-in profile) only when a page is first needed.
+
+    Most runs never need it, and a locked profile (another Chrome using
+    chrome-profile) must not stop the whole run: if it cannot open, every page
+    request raises Blocked, so only the checks that needed it become
+    "verify manually". It is never retried in the same run.
+    """
+
+    def __init__(self, opener, login_state: str = "profile"):
+        self.login_state = login_state
+        self._opener = opener
+        self._context: GuardedContext | None = None
+        self._failed: Exception | None = None
+
+    @property
+    def opened(self) -> bool:
+        return self._context is not None
+
+    def new_safe_page(self, site: Site) -> SafePage:
+        return self._open().new_safe_page(site)
+
+    def _open(self) -> GuardedContext:
+        if self._context is not None:
+            return self._context
+        if self._failed is None:
+            try:
+                context = self._opener()
+            except Exception as exc:
+                log.error("could not open the agent profile: %s: %s", type(exc).__name__, exc)
+                self._failed = Blocked(f"agent profile did not open: {exc}", PROFILE_UNAVAILABLE)
+            else:
+                try:
+                    self_check(context.guard)  # never use a context without its safety layers
+                except Exception as exc:
+                    context.close()
+                    self._failed = exc
+                else:
+                    self._context = context
+        if self._failed is not None:
+            raise self._failed.with_traceback(None)  # same reason for every check, fresh traceback
+        return self._context
+
+    def close(self) -> None:
+        if self._context is not None:
+            self._context.close()
 
 
 def open_quick_context(pw, cfg: Config) -> GuardedContext:
