@@ -52,8 +52,10 @@ def candidate_site(site):
         summary = room.summary and dataclasses.replace(room.summary, **{
             f.name: _keep(getattr(room.summary, f.name)) for f in dataclasses.fields(room.summary)})
         price_text = room.price_text and (_keep(room.price_text[0]), _MARKER.sub("", room.price_text[1]).strip())
+        labels = dataclasses.replace(room.labels, **{
+            f.name: _MARKER.sub("", getattr(room.labels, f.name)) for f in dataclasses.fields(room.labels)})
         rooms[room_id] = dataclasses.replace(
-            room, search_price=_keep(room.search_price), steps=tuple(_keep(s) for s in room.steps),
+            room, labels=labels, search_price=_keep(room.search_price), steps=tuple(_keep(s) for s in room.steps),
             summary=summary, price_options=tuple((offer, _keep(s)) for offer, s in room.price_options),
             price_text=price_text)
     return dataclasses.replace(
