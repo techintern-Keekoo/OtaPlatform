@@ -177,3 +177,45 @@ Until then, never report Goibibo prices "via MMT" as a Goibibo check.
   '+ taxes', 'taxes & fees', 'price per night' found on the page). For
   Agoda, confirm the basis with it: the 8 Oct scrape said "before taxes", but
   the agent's link asks for `finalPriceView=1`.
+
+## Live evidence, 9 Oct 2026 (stay 10–11 Oct, 2 adults)
+
+Gathered through Composio: a direct HTTP call from its sandbox for eZee, and
+Firecrawl snapshots (location India) for the OTAs. These were not taken on the
+office PC, so every OTA selector below still needs one `check --site` there.
+
+| Room | Zen before tax (+tax) | Agoda before tax | MakeMyTrip before tax + taxes & fees | Booking.com price + taxes |
+|---|---|---|---|---|
+| Standard Garden | 1,622.88 (+81.14) | 2,233 (cancellation policy) | 1,622 + 230 | 3,400.32 + 193 (non-ref) |
+| Deluxe Valley | 1,876.56 (+93.83) | 2,583 (non-ref) | 1,876 + 265 | 3,931.84 + 223 (non-ref) |
+| Deluxe Mountain | 2,282.28 (+114.11) | sold out | 2,281 + 323 | 4,781.92 + 272 (non-ref) |
+| Family Suite | 3,144.54 (+157.23) | 4,334 (cancellation policy) | 3,142 + 445 | 6,588.56 + 374 (non-ref) |
+| Premium Cottage | 2,789.22 (+139.46) | sold out | 2,787 + 395 | 5,844.08 + 332 (non-ref) |
+
+What this proves:
+- **eZee:** for all 36 records, the price incl. tax equals the price before tax
+  plus the tax (5% GST), so the add-up guard is safe. There is no meal-plan
+  field: `Room_Name` is the rate-plan name, and `Room_Description` ends in
+  `EP` (European Plan = room only) for all 5 tracked rooms. Each room has 2
+  plans, both refundable; one is "3 Min Nights", which the agent skips.
+- **eZee has a 6th room type, `4757200000000000004` "Quadruple dom room EP",**
+  which is not tracked. Agoda, MakeMyTrip and Booking.com all sell it as
+  "Quadruple Room". Keekoo decides whether to track it.
+- **Agoda's price is before tax:** each card says "Per night before taxes &
+  fees", even with `finalPriceView=1`, so `price_includes_tax: false` is right.
+  Agoda showed Deluxe Mountain and Premium Cottage sold out while eZee had 6
+  and 3 rooms free: check that the channel manager pushes stock to Agoda.
+- **MakeMyTrip:** the current `price_text` read all 5 rooms, and the page for
+  tomorrow (the "night 2" that fails on the office PC) loaded normally. So the
+  office-PC failure is more likely MMT reacting to a second quick visit than
+  rooms being sold out. Before tax, MMT is Rs 1–2 **below** Zen (whole rupees
+  vs paise); with taxes and fees, Zen is about 9% cheaper. The agent compares
+  finals for MMT, so this is correctly "ok".
+- **Booking.com:** the old candidates could not work. The tax is the class
+  `.prd-taxes-and-fees-under-price`, not a `data-testid`, and `.hprt-conditions`
+  does not exist. The new `price_text` (room row → "price +₹ tax taxes and fees")
+  read 5/5 rooms on the snapshot. Each room had one row (non-refundable only).
+  When a room has several rate plans, only its first row carries the room
+  name, so the first (usually cheapest) plan is the one compared.
+- **Goibibo:** Firecrawl was redirected to the Goibibo home page. **Cleartrip:**
+  every Firecrawl engine was blocked. Both can only be set up from the office PC.

@@ -4,6 +4,11 @@
 **Status as of:** 9 Oct 2026
 **Code:** branch `claude/festive-tesla-1av7qt`, pull request https://github.com/techintern-Keekoo/OtaPlatform/pull/1
 
+> **Update, 9 Oct (later):** production hardening is on branch `claude/loving-cannon-s37n4o`
+> (silent-failure detection, exit codes, `doctor`, misread guard, Booking.com fix).
+> The plan to launch, with the office-PC steps and the 7-day go/no-go gate, is in
+> [`docs/GO_LIVE_PLAN.md`](GO_LIVE_PLAN.md). Live evidence from 9 Oct is in `docs/site-findings.md`.
+
 ---
 
 ## 1. What we are making
