@@ -1,0 +1,431 @@
+"""Load config.yaml (yaml.safe_load) into plain dataclasses with clear errors.
+
+Secrets are never read from here; they come from the environment (.env).
+"""
+from __future__ import annotations
+
+import dataclasses
+import re
+from dataclasses import dataclass
+from decimal import Decimal
+from pathlib import Path
+from urllib.parse import urlsplit
+
+import yaml
+
+from .models import RoomKey, Stay
+from .safety import DEFAULT_COMMIT_PATH_PATTERNS, host_allowed
+
+_MISSING = object()
+
+
+class ConfigError(ValueError):
+    pass
+
+
+@dataclass(frozen=True)
+class SummarySelectors:
+    ready: str
+    room_name: str
+    meal_plan: str
+    cancellation: str
+    final: str | None  # None: page shows no total, so final = room_price + gst (+fees -discount) as shown
+    room_price: str | None
+    gst: str | None
+    fees: str | None
+    discount: str | None
+
+
+@dataclass(frozen=True)
+class SiteRoom:
+    labels: RoomKey  # how this site words the room / meal plan / cancellation
+    search_price: str  # first price selector (kept for the checker / simple sites)
+    steps: tuple[str, ...]
+    summary: SummarySelectors | None
+    ezee_room_type: str | None = None  # kind "ezee" only: the engine's RoomTypeUnkId
+    # (offer type, selector) tried in order; the first that is on the page wins.
+    price_options: tuple[tuple[str, str], ...] = ()
+    # (container selector, regex with (?P<price>) and optional (?P<tax>)): read the room's
+    # card text and pull price + taxes out of it (sites with unlabelled prices, e.g. MMT).
+    price_text: tuple[str, str] | None = None
+
+
+@dataclass(frozen=True)
+class Site:
+    key: str
+    label: str
+    enabled: bool
+    allowed_domains: tuple[str, ...]
+    search_url: str
+    date_format: str
+    logged_in_marker: str | None
+    login_wall_selectors: tuple[str, ...]
+    captcha_selectors: tuple[str, ...]
+    block_texts: tuple[str, ...]
+    rooms: dict[str, SiteRoom]
+    kind: str = "browser"  # "browser" (Playwright + selectors) or "ezee" (website search, no browser)
+    ready: bool = True  # False: still has TODOs; reported as "not set up", never opened
+    deep_ready: bool = True  # False: checkout check not set up; suspects become "verify manually"
+    scroll_to_load: bool = False  # scroll down after loading (room list loads lazily)
+    scroll_to: str | None = None   # then scroll this element on screen (e.g. the room-list heading)
+    wait_for: str | None = None    # then wait for this (e.g. a room box); reload once if it never comes
+    ezee_hotel: str | None = None
+
+    def search_url_for(self, stay: Stay) -> str:
+        return (
+            self.search_url.replace("{checkin}", stay.checkin.strftime(self.date_format))
+            .replace("{checkout}", stay.checkout.strftime(self.date_format))
+            .replace("{adults}", str(stay.adults))
+        )
+
+    def step_selectors(self) -> set[str]:
+        return {step for room in self.rooms.values() for step in room.steps}
+
+
+@dataclass(frozen=True)
+class StayPlan:
+    days_ahead: tuple[int, ...]
+    nights: int
+    adults: int
+
+
+@dataclass(frozen=True)
+class BrowserSettings:
+    profile_dir: Path
+    channel: str | None
+    headless: bool
+    timeout_ms: int
+    delay_seconds: tuple[float, float]
+
+
+@dataclass(frozen=True)
+class Config:
+    property_name: str
+    min_margin_pct: Decimal
+    stay: StayPlan
+    rooms: dict[str, RoomKey]
+    sites: dict[str, Site]
+    browser: BrowserSettings
+    commit_path_patterns: tuple[str, ...]
+    extra_payment_hosts: tuple[str, ...]
+    readonly_post_paths: tuple[str, ...]
+    screenshot_dir: Path
+    csv_path: Path
+    sheet_worksheet: str
+    alert_param_name: str
+    alert_include_could_not_check: bool
+    alert_max_chars: int
+
+    @property
+    def website(self) -> Site:
+        return self.sites["website"]
+
+    def otas(self, only: str | None = None) -> list[Site]:
+        if only is not None and (only == "website" or only not in self.sites):
+            raise ConfigError(f"--only must be an OTA key from config, got {only!r}")
+        return [
+            site for key, site in self.sites.items()
+            if key != "website" and site.enabled and (only is None or key == only)
+        ]
+
+
+def _get(data: dict, key: str, where: str, kind, default=_MISSING):
+    if not isinstance(data, dict):
+        raise ConfigError(f"{where} must be a mapping")
+    value = data.get(key)
+    if value is None:
+        if default is _MISSING:
+            raise ConfigError(f"{where}.{key} is required")
+        return default
+    if not isinstance(value, kind):
+        raise ConfigError(f"{where}.{key} has the wrong type ({type(value).__name__})")
+    return value
+
+
+def _strings(data: dict, key: str, where: str) -> tuple[str, ...]:
+    values = _get(data, key, where, list, [])
+    if not all(isinstance(v, str) and v for v in values):
+        raise ConfigError(f"{where}.{key} must be a list of non-empty strings")
+    return tuple(values)
+
+
+def _room_key(data: dict, where: str) -> RoomKey:
+    return RoomKey(
+        room=_get(data, "room", where, str),
+        meal_plan=_get(data, "meal_plan", where, str),
+        cancellation=_get(data, "cancellation", where, str),
+    )
+
+
+def _summary(data: dict, where: str) -> SummarySelectors:
+    required = {k: _get(data, k, where, str) for k in ("ready", "room_name", "meal_plan", "cancellation")}
+    optional = {k: _get(data, k, where, str, None) for k in ("final", "room_price", "gst", "fees", "discount")}
+    if optional["final"] is None and not (optional["room_price"] and optional["gst"]):
+        raise ConfigError(f"{where}: set final, or both room_price and gst (final is then their sum as shown)")
+    return SummarySelectors(**required, **optional)
+
+
+def _fill(value, labels: RoomKey, where: str):
+    """Put this site's room/meal/cancellation wording into a template selector."""
+    if isinstance(value, str):
+        return (value.replace("{room}", labels.room).replace("{meal_plan}", labels.meal_plan)
+                .replace("{cancellation}", labels.cancellation))
+    if isinstance(value, list):
+        return [_fill(v, labels, where) for v in value]
+    if isinstance(value, dict):
+        return {k: _fill(v, labels, where) for k, v in value.items()}
+    return value
+
+
+def _site_room(data: dict, where: str, canonical: RoomKey, template: dict | None = None) -> SiteRoom:
+    if not isinstance(data, dict):
+        raise ConfigError(f"{where} must be a mapping")
+    labels = data.get("labels")
+    if template:
+        key = _room_key(labels, f"{where}.labels") if labels else canonical
+        for text in (key.room, key.meal_plan, key.cancellation):
+            if "'" in text or '"' in text or "{" in text:  # would break the selector it is put into
+                raise ConfigError(f"{where}.labels must not contain quotes or braces: {text!r}")
+        data = {**_fill(template, key, where), **data}
+    if "price_text" in data:
+        return _text_room(data, where, _room_key(labels, f"{where}.labels") if labels else canonical)
+    if "steps" not in data:
+        raise ConfigError(f"{where}.steps is required ([] = read the summary fields on the search page, no clicks)")
+    steps = _strings(data, "steps", where)
+    options = _price_options(data.get("search_price"), f"{where}.search_price")
+    return SiteRoom(
+        labels=_room_key(labels, f"{where}.labels") if labels else canonical,
+        search_price=options[0][1],
+        steps=steps,
+        summary=_summary(_get(data, "summary", where, dict), f"{where}.summary"),
+        price_options=options,
+    )
+
+
+def _text_room(data: dict, where: str, labels: RoomKey) -> SiteRoom:
+    spec = _get(data, "price_text", where, dict)
+    container = _get(spec, "container", f"{where}.price_text", str)
+    pattern = _get(spec, "pattern", f"{where}.price_text", str)
+    try:
+        compiled = re.compile(pattern)
+    except re.error as exc:
+        raise ConfigError(f"{where}.price_text.pattern is not a valid regex: {exc}") from None
+    if "price" not in compiled.groupindex:
+        raise ConfigError(f"{where}.price_text.pattern needs a (?P<price>...) group")
+    return SiteRoom(labels=labels, search_price=container, steps=(), summary=None, price_text=(container, pattern))
+
+
+def _price_options(value, where: str) -> tuple[tuple[str, str], ...]:
+    """search_price is one selector, or a list of {offer, selector} tried in order."""
+    if isinstance(value, str) and value:
+        return (("", value),)
+    if isinstance(value, list) and value:
+        options = []
+        for i, item in enumerate(value):
+            if not isinstance(item, dict):
+                raise ConfigError(f"{where}[{i}] must be a mapping with offer and selector")
+            options.append((_get(item, "offer", f"{where}[{i}]", str), _get(item, "selector", f"{where}[{i}]", str)))
+        return tuple(options)
+    raise ConfigError(f"{where} must be a selector or a list of {{offer, selector}}")
+
+
+def _ezee_site(key: str, data: dict, rooms: dict[str, RoomKey]) -> Site:
+    where = f"sites.{key}"
+    domains = _strings(data, "allowed_domains", where)
+    url = _get(data, "search_url", where, str)
+    parts = urlsplit(url)
+    if parts.scheme != "https" or not host_allowed(parts.hostname, domains) or "/booking/" not in parts.path:
+        raise ConfigError(f"{where}.search_url must be the https eZee room-list page inside allowed_domains")
+    site_rooms = {}
+    for room_id, room_data in _get(data, "rooms", where, dict, {}).items():
+        if room_id not in rooms:
+            raise ConfigError(f"{where}.rooms.{room_id} is not defined in top-level rooms")
+        type_id = _get(room_data, "ezee_room_type", f"{where}.rooms.{room_id}", str)
+        if not type_id.isdigit():
+            raise ConfigError(f"{where}.rooms.{room_id}.ezee_room_type must be digits")
+        site_rooms[room_id] = SiteRoom(labels=rooms[room_id], search_price="", steps=(), summary=None,
+                                       ezee_room_type=type_id)
+    return Site(
+        key=key, label=_get(data, "label", where, str, key), enabled=_get(data, "enabled", where, bool, False),
+        allowed_domains=domains, search_url=url, date_format="%d_%m_%Y", logged_in_marker=None,
+        login_wall_selectors=(), captcha_selectors=(), block_texts=(), rooms=site_rooms,
+        kind="ezee", ezee_hotel=_get(data, "ezee_hotel", where, str),
+    )
+
+
+def _site(key: str, data: dict, rooms: dict[str, RoomKey]) -> Site:
+    where = f"sites.{key}"
+    if isinstance(data, dict) and data.get("kind", "browser") == "ezee":
+        return _ezee_site(key, data, rooms)
+    if isinstance(data, dict) and data.get("kind", "browser") != "browser":
+        raise ConfigError(f"{where}.kind must be browser or ezee")
+    domains = _strings(data, "allowed_domains", where)
+    url = _get(data, "search_url", where, str)
+    parts = urlsplit(url.replace("{", "").replace("}", ""))
+    if parts.scheme != "https" or not host_allowed(parts.hostname, domains):
+        raise ConfigError(f"{where}.search_url must be https and inside allowed_domains")
+    if "{checkin}" not in url:  # else every stay would silently get today's price
+        raise ConfigError(f"{where}.search_url must contain {{checkin}} so each stay gets its own dates")
+    raw_rooms = _get(data, "rooms", where, dict, {})
+    # Optional: selectors written once, with {room} {meal_plan} {cancellation}
+    # replaced by each room's labels on this site. A room may still override any key.
+    template = _get(data, "room_template", where, dict, None)
+    site_rooms = {}
+    for room_id, room_data in raw_rooms.items():
+        if room_id not in rooms:
+            raise ConfigError(f"{where}.rooms.{room_id} is not defined in top-level rooms")
+        site_rooms[room_id] = _site_room(room_data, f"{where}.rooms.{room_id}", rooms[room_id], template)
+    return Site(
+        key=key,
+        label=_get(data, "label", where, str, key),
+        enabled=_get(data, "enabled", where, bool, False),
+        allowed_domains=domains,
+        search_url=url,
+        date_format=_get(data, "date_format", where, str, "%Y-%m-%d"),
+        logged_in_marker=_get(data, "logged_in_marker", where, str, None),
+        login_wall_selectors=_strings(data, "login_wall_selectors", where),
+        captcha_selectors=_strings(data, "captcha_selectors", where),
+        block_texts=_strings(data, "block_texts", where),
+        scroll_to_load=_get(data, "scroll_to_load", where, bool, False),
+        scroll_to=_get(data, "scroll_to", where, str, None),
+        wait_for=_get(data, "wait_for", where, str, None),
+        rooms=site_rooms,
+    )
+
+
+def _find_todos(value, path: str):
+    if isinstance(value, str) and "todo" in value.lower():
+        yield path
+    elif isinstance(value, dict):
+        for k, v in value.items():
+            yield from _find_todos(v, f"{path}.{k}")
+    elif isinstance(value, list):
+        for i, v in enumerate(value):
+            yield from _find_todos(v, f"{path}[{i}]")
+
+
+# Only used by the checkout (deep) check: steps, summary selectors, and the meal /
+# cancellation wording compared on the summary page.
+_DEEP_ONLY = re.compile(r"\.(steps|summary|labels\.meal_plan|labels\.cancellation)(\[|\.|$)")
+
+
+def _check_placeholders(raw: dict) -> tuple[set[str], set[str]]:
+    """Raise if the website or shared settings still have TODOs.
+
+    Returns (not_ready, not_deep_ready) OTA keys. not_ready: TODOs in what
+    the quick scan needs; skipped and reported "not set up". not_deep_ready:
+    TODOs only in checkout steps/summary; the quick scan runs, suspects are
+    reported "possible violation, verify manually".
+    """
+    sites = raw.get("sites")
+    if not isinstance(sites, dict):
+        raise ConfigError("config.sites must be a mapping")
+    shared = {k: v for k, v in raw.items() if k != "sites"}
+    todos = list(_find_todos(shared, "config"))
+    not_ready, not_deep = set(), set()
+    for key, site in sites.items():
+        if not isinstance(site, dict) or not site.get("enabled"):
+            continue  # a malformed site is reported clearly by _site() later
+        site_todos = list(_find_todos(site, f"config.sites.{key}"))
+        if site_todos and key == "website":
+            todos += site_todos
+        elif any(not _DEEP_ONLY.search(path) for path in site_todos):
+            not_ready.add(key)
+        elif site_todos:
+            not_deep.add(key)
+    if todos:
+        raise ConfigError("unfilled TODO placeholders: " + ", ".join(todos))
+    return not_ready, not_deep
+
+
+def _validate_sites(sites: dict[str, Site]) -> None:
+    website = sites.get("website")
+    if website is None or not website.enabled or not website.rooms:
+        raise ConfigError("sites.website must exist, be enabled and map at least one room")
+    for site in sites.values():
+        if site.enabled and not site.rooms:
+            raise ConfigError(f"sites.{site.key} is enabled but maps no rooms")
+        missing = set(site.rooms) - set(website.rooms) if site.enabled else set()
+        if missing:
+            raise ConfigError(f"sites.{site.key} rooms not mapped on website: {sorted(missing)}")
+
+
+def parse_config(raw: dict, check_placeholders: bool = True) -> Config:
+    if not isinstance(raw, dict):
+        raise ConfigError("config file must be a YAML mapping")
+    not_ready, not_deep = _check_placeholders(raw) if check_placeholders else (set(), set())
+
+    rooms = {}
+    for i, item in enumerate(_get(raw, "rooms", "config", list)):
+        room_id = _get(item, "id", f"rooms[{i}]", str)
+        rooms[room_id] = _room_key(item, f"rooms[{i}]")
+
+    sites = {k: _site(k, v, rooms) for k, v in _get(raw, "sites", "config", dict).items()}
+    for key in not_ready:
+        sites[key] = dataclasses.replace(sites[key], ready=False)
+    for key in not_deep:
+        sites[key] = dataclasses.replace(sites[key], deep_ready=False)
+    if not _get(raw, "compare_non_refundable", "config", bool, True):  # option B: first offer type only
+        for key, site in sites.items():
+            rooms = {rid: dataclasses.replace(r, price_options=r.price_options[:1]) for rid, r in site.rooms.items()}
+            sites[key] = dataclasses.replace(site, rooms=rooms)
+    _validate_sites(sites)
+
+    stay = _get(raw, "stay", "config", dict)
+    days = tuple(_get(stay, "days_ahead", "stay", list))
+    nights = _get(stay, "nights", "stay", int, 1)
+    adults = _get(stay, "adults", "stay", int, 2)
+    if not days or any(not isinstance(d, int) or d < 0 for d in days) or nights < 1 or adults < 1:
+        raise ConfigError("stay: days_ahead must be non-negative ints; nights and adults >= 1")
+
+    b = _get(raw, "browser", "config", dict)
+    delay = _get(b, "delay_seconds", "browser", list, [5, 12])
+    if len(delay) != 2 or not 0 <= delay[0] <= delay[1]:
+        raise ConfigError("browser.delay_seconds must be [min, max] with 0 <= min <= max")
+    browser = BrowserSettings(
+        profile_dir=Path(_get(b, "profile_dir", "browser", str)),
+        channel=_get(b, "channel", "browser", str, None),
+        headless=_get(b, "headless", "browser", bool, False),
+        timeout_ms=_get(b, "timeout_ms", "browser", int, 30000),
+        delay_seconds=(float(delay[0]), float(delay[1])),
+    )
+
+    if "tolerance_pct" in raw:
+        raise ConfigError("tolerance_pct was renamed to min_margin_pct (Zen must be cheaper than the OTA)")
+    tolerance = _get(raw, "min_margin_pct", "config", (int, float))
+    if isinstance(tolerance, bool) or tolerance < 0:
+        raise ConfigError("min_margin_pct must be a number >= 0")
+
+    network = _get(raw, "network", "config", dict, {})
+    commit = _strings(network, "commit_path_patterns", "network") or DEFAULT_COMMIT_PATH_PATTERNS
+    output = _get(raw, "output", "config", dict, {})
+    alerts = _get(raw, "alerts", "config", dict, {})
+
+    return Config(
+        property_name=_get(_get(raw, "property", "config", dict), "name", "property", str),
+        min_margin_pct=Decimal(str(tolerance)),
+        stay=StayPlan(days, nights, adults),
+        rooms=rooms,
+        sites=sites,
+        browser=browser,
+        commit_path_patterns=commit,
+        extra_payment_hosts=_strings(network, "extra_payment_host_keywords", "network"),
+        readonly_post_paths=_strings(network, "readonly_post_paths", "network"),
+        screenshot_dir=Path(_get(output, "screenshot_dir", "output", str, "screenshots")),
+        csv_path=Path(_get(output, "csv_path", "output", str, "output/rate_parity.csv")),
+        sheet_worksheet=_get(output, "sheet_worksheet", "output", str, "checks"),
+        alert_param_name=_get(alerts, "template_param_name", "alerts", str, "summary"),
+        alert_include_could_not_check=_get(alerts, "include_could_not_check", "alerts", bool, True),
+        alert_max_chars=_get(alerts, "max_chars", "alerts", int, 900),
+    )
+
+
+def load_config(path: str | Path, check_placeholders: bool = True) -> Config:
+    try:
+        with open(path, encoding="utf-8") as handle:
+            raw = yaml.safe_load(handle)
+    except FileNotFoundError:
+        raise ConfigError(f"config file not found: {path}") from None
+    except yaml.YAMLError as exc:
+        raise ConfigError(f"invalid YAML in {path}: {exc}") from None
+    return parse_config(raw, check_placeholders)
