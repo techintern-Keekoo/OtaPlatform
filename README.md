@@ -125,8 +125,9 @@ On the office PC, in the project folder with the venv active:
 5. Double-click `scripts\install_schedule.bat`. After the next scheduled time,
    run doctor again: the `last run` and `schedule` lines should PASS, and Task
    Scheduler's "Last Run Result" should be `0x0`. Other values: `0x3` = no Zen
-   website price (nothing could be compared), `0x4` = an OTA page loaded but no
-   room was read (layout changed? run `check --site`), `0x1` = the run crashed,
+   website price (nothing could be compared), `0x4` = an OTA gave no price for a
+   night: its layout changed, or it was not checked (room list did not load,
+   CAPTCHA, login wall); run `check --site`, `0x1` = the run crashed,
    `0x2` = config error. Details: `output\last_run.json` and `output\agent.log`
    (moved to `agent.log.1` when it passes 5 MB).
 

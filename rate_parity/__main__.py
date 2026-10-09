@@ -112,7 +112,10 @@ def _run_and_record(run, cfg, args) -> int:
         send_failure(exc, cfg, finished, args.dry_run)
         print(f"Run FAILED: {health.error_text(exc)}", file=sys.stderr)
         return health.CRASH
-    health.write_last_run(cfg.csv_path.parent, health.last_run(rows, started, now_ist(), args.dry_run))
+    if args.only:  # a one-site test is not a full run: keep the scheduled run's heartbeat
+        logging.getLogger(__name__).info("--only run: %s not updated", health.LAST_RUN_FILE)
+    else:
+        health.write_last_run(cfg.csv_path.parent, health.last_run(rows, started, now_ist(), args.dry_run))
     counts = Counter(row.status.value for row in rows)
     print(f"{len(rows)} checks: " + ", ".join(f"{k}={v}" for k, v in sorted(counts.items())))
     print(health.health_line(rows))

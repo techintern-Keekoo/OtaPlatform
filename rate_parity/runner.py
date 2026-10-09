@@ -122,7 +122,8 @@ class StayCheck:
             row.website_final = web.final if web else None
             web_plan = web.notes if web else []
         if web_search is None:
-            return _finish(row, Status.COULD_NOT_CHECK, self.web_note or "website search price not found")
+            room_error = getattr(self.web_collector, "room_errors", {}).get(room_id)
+            return _finish(row, Status.COULD_NOT_CHECK, self.web_note or room_error or "website search price not found")
         if row.search_price is None:
             return _finish(row, Status.COULD_NOT_CHECK, ota_note or "no OTA price (room sold out or not listed)")
 

@@ -550,3 +550,14 @@ def test_doctor_bat_runs_doctor_and_pauses():
     assert "call .venv\\Scripts\\activate.bat" in text
     assert "python -m rate_parity doctor --config config.example.yaml" in text
     assert "pause" in text
+
+
+def test_last_run_says_when_it_was_a_manual_dry_run(tmp_path):
+    result = doctor.check_last_run(write_last_run(tmp_path, dry_run=True), NOW)
+    assert result.level == doctor.PASS and "manual --dry-run" in result.reason
+
+
+def test_last_run_degraded_lists_sites_not_checked(tmp_path):
+    path = write_last_run(tmp_path, status="degraded", exit_code=4, unchecked_sites=["MakeMyTrip"])
+    result = doctor.check_last_run(path, NOW)
+    assert result.level == doctor.WARN and "MakeMyTrip" in result.reason

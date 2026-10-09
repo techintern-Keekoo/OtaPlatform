@@ -30,7 +30,9 @@ replacement for the office PC.
 | Risk | Before | Now |
 |---|---|---|
 | OTA changes its layout | every room shows "sold out", run says success | `SITE BROKEN?` on the rows, in the report and first in WhatsApp; exit code 4 |
-| Whole property really sold out | (n/a) | page says sold out for every room: treated as a full house, not broken |
+| OTA page never loads / CAPTCHA / login wall | an `error:` note, but run says success | that site and night count as "not checked": exit code 4, listed in `last_run.json` and by `doctor` |
+| Whole property really sold out | (n/a) | every room box says "Sold out": a full house, not broken (page-wide text like reviews is ignored) |
+| CSV open in Excel | that run's rows lost, run failed | rows saved to `rate_parity_pending_<time>.csv`, run carries on |
 | Chrome profile locked or low memory | whole run crashed, nothing saved | profile opened only when a checkout check needs it; if it can't open, only those rows say "verify manually" |
 | Run crashes | Task Scheduler showed success | exit code 1, `last_run.json` = failed, WhatsApp "agent FAILED" |
 | No Zen price | rows "could not check", exit 0 | exit code 3, status degraded |
@@ -40,7 +42,7 @@ replacement for the office PC.
 | Booking.com | selectors could never match | price + tax per room row; 5/5 on a 9 Oct snapshot |
 | Nobody knows the PC is ready | trial and error | `doctor` checks Python, packages, config, disk, memory, profile lock, Chrome, website, WATI, clock, schedule, last run |
 
-Tests: 229 → 389, all passing, including a real-Chromium end-to-end run.
+Tests: 229 → 402, all passing, including a real-Chromium end-to-end run.
 
 ## 3. Field tasks on the office PC (in this order)
 
@@ -52,7 +54,9 @@ Each step has a pass condition. Don't move on until it passes.
 3. **Booking.com (about 10 min).**
    `python -m rate_parity check --config config.example.yaml --site booking_com --days 1`
    Pass: all 5 rooms OK, and the prices look like the ones on booking.com
-   in your own browser. Then delete the two `TODO-verify: ` prefixes in the
+   in your own browser. Booking.com shows several rate plans per room on
+   some dates, and the agent reads the **first** row of each room: check that
+   it is the plan you want to compare (refundable / room only). Then delete the two `TODO-verify: ` prefixes in the
    `booking_com` block (`wait_for` and `container`) and send the output.
 4. **MakeMyTrip night 2.** `python -m rate_parity run --config config.example.yaml --dry-run`.
    If night 2 is still empty, send `screenshots\makemytrip_load_failed_*.txt`.

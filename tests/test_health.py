@@ -168,3 +168,41 @@ def test_failure_alert_never_raises(monkeypatch):
         monkeypatch.setenv(name, value)
     text = alerts.send_failure(ValueError("x"), cfg, END, dry_run=False)
     assert text.startswith("Rate parity agent FAILED") and "\n" not in text
+
+
+# --- an OTA that was never checked is a fault, "not set up" and "sold out" are not --------
+
+def _night(ota, note, checkin="2026-10-08", price=None):
+    r = CheckRow(ota=ota, property="Zen", room="Standard", meal_plan="Room only", cancellation="Free cancellation",
+                 checkin=checkin, checkout="2026-10-09", adults=2)
+    r.website_search_price, r.search_price, r.status, r.note = D("1545.60"), price, Status.COULD_NOT_CHECK, note
+    return r
+
+
+@pytest.mark.parametrize("note", [
+    "error: SelectorMissing: Booking.com: room list did not load (tried 2 times)",
+    "verify manually",              # CAPTCHA (Blocked flag)
+    "re-login to Agoda",            # login wall
+    "safety stop: refusing to click 'Pay now'",
+])
+def test_a_night_with_no_price_and_a_fault_is_degraded(note):
+    rows = [_night("MakeMyTrip", "", price=D("1901")), _night("MakeMyTrip", note, checkin="2026-10-09")]
+    assert health.exit_code(rows) == 4 and health.unchecked_sites(rows) == ["MakeMyTrip"]
+    assert "not checked" in health.health_line(rows)
+
+
+@pytest.mark.parametrize("note", ["not set up yet (selectors still TODO in config)",
+                                  "no OTA price (room sold out or not listed)"])
+def test_not_set_up_and_sold_out_are_not_faults(note):
+    rows = [_night("Cleartrip", note), _night("Cleartrip", note)]
+    assert health.exit_code(rows) == 0 and health.unchecked_sites(rows) == []
+
+
+def test_one_priced_room_means_the_night_was_checked():
+    rows = [_night("Agoda", "", price=D("2233")), _night("Agoda", "error: TimeoutError: slow card")]
+    assert health.exit_code(rows) == 0
+
+
+def test_a_one_site_test_run_keeps_the_scheduled_heartbeat(cli):
+    code, beat, _ = cli([row()], "--dry-run", "--only", "agoda")
+    assert code == 0 and beat is None  # --only never writes output/last_run.json

@@ -49,13 +49,21 @@ class EzeeCollector(Collector):
         self._evidence_dir = Path(evidence_dir)
         self._cache: dict[Stay, list[dict]] = {}
         self._evidence: dict[Stay, str] = {}
+        self.room_errors: dict[str, str] = {}  # room id -> why its price was refused (shown on its row)
         # Same rules as the browser guard; the search path is the only exemption.
         self._guard = NetworkGuard(DEFAULT_COMMIT_PATH_PATTERNS, (), [SEARCH_PATH])
 
     def quick_scan(self, page, stay: Stay) -> dict[str, Decimal]:
         prices = {}
+        self._records(stay)  # a failed search or a wrong guest count still stops the whole stay
+        self.room_errors = {}
         for room_id in self.site.rooms:
-            plan = self._best_plan(stay, room_id)
+            try:
+                plan = self._best_plan(stay, room_id)
+            except SelectorMissing as exc:  # one odd room must not black out the other four
+                log.error("%s", exc)
+                self.room_errors[room_id] = str(exc)
+                continue
             if plan is not None:
                 prices[room_id] = _money(plan["TotalPrice_ExclusiveAll"])
         return prices

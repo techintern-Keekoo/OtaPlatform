@@ -6,7 +6,9 @@ change the exit code. These do:
     1  crash (set by __main__)
     2  config error (set by __main__)
     3  no website (Zen) price at all, so nothing could be compared
-    4  a set-up OTA page loaded but no room price was read (layout changed?)
+    4  a set-up OTA gave no price for a night: page loaded but nothing read
+       (layout changed?), or never checked (room list did not load, CAPTCHA,
+       safety stop, error). "Not set up" and "sold out" are not faults.
 The website problem wins over a broken OTA: without Zen nothing is compared.
 """
 from __future__ import annotations
@@ -38,6 +40,25 @@ def broken_sites(rows: list[CheckRow]) -> dict[str, str]:
     return dict(sorted(found.items()))
 
 
+# Notes that explain a missing OTA price without any agent fault.
+_BENIGN = ("not set up yet", "no OTA price")
+
+
+def unchecked_sites(rows: list[CheckRow]) -> list[str]:
+    """OTA labels with a night where no room got a price for a reason other than
+    "not set up" / "sold out" (and not already flagged SITE BROKEN?)."""
+    nights: dict[tuple[str, str], list[CheckRow]] = {}
+    for row in rows:
+        nights.setdefault((row.ota, row.checkin), []).append(row)
+    found = set()
+    for (ota, _), night in nights.items():
+        if any(r.search_price is not None for r in night):
+            continue
+        if any(r.note and not r.note.startswith(_BENIGN + (SITE_BROKEN,)) for r in night):
+            found.add(ota)
+    return sorted(found)
+
+
 def website_missing(rows: list[CheckRow]) -> bool:
     """True when not one website (Zen) price was read, for any room or night."""
     return not any(row.website_search_price is not None for row in rows)
@@ -46,7 +67,7 @@ def website_missing(rows: list[CheckRow]) -> bool:
 def exit_code(rows: list[CheckRow]) -> int:
     if website_missing(rows):
         return NO_WEBSITE
-    if broken_sites(rows):
+    if broken_sites(rows) or unchecked_sites(rows):
         return SITE_BROKEN_EXIT
     return OK
 
@@ -65,6 +86,7 @@ def run_health(rows: list[CheckRow]) -> dict:
         "counts": {status.value: counts[status] for status in Status},
         "website_ok": not website_missing(rows),
         "broken_sites": list(broken_sites(rows)),
+        "unchecked_sites": unchecked_sites(rows),
         "violations": [
             {"ota": r.ota, "room": r.room, "checkin": r.checkin,
              "gap_pct": None if r.gap_pct is None else str(r.gap_pct)}
@@ -80,7 +102,10 @@ def health_line(rows: list[CheckRow]) -> str:
     if code == NO_WEBSITE:
         line += " - no website (Zen) price was read, nothing could be compared"
     elif code == SITE_BROKEN_EXIT:
-        line += " - site broken? " + ", ".join(broken_sites(rows))
+        if broken_sites(rows):
+            line += " - site broken? " + ", ".join(broken_sites(rows))
+        if unchecked_sites(rows):
+            line += " - not checked (see report notes): " + ", ".join(unchecked_sites(rows))
     return line
 
 
@@ -95,7 +120,7 @@ def failed_run(error: BaseException, started_at: datetime, finished_at: datetime
         **_times(started_at, finished_at, dry_run),
         "status": "failed", "exit_code": CRASH, "checks": 0,
         "counts": {status.value: 0 for status in Status}, "website_ok": False,
-        "broken_sites": [], "violations": [], "error": error_text(error),
+        "broken_sites": [], "unchecked_sites": [], "violations": [], "error": error_text(error),
     }
 
 

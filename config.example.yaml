@@ -277,8 +277,9 @@ sites:
     # change both together. finalPriceView=1 asks Agoda to show the total price.
     search_url: "https://www.agoda.com/en-in/zen-manali-by-keekoo-stays/hotel/manali-in.html?checkIn={checkin}&los=1&adults={adults}&children=0&rooms=1&currencyCode=INR&finalPriceView=1"
     date_format: "%Y-%m-%d"
-    # Is Agoda's room price before tax (false) or incl. taxes (true)? Seen as
-    # "before taxes" on 8 Oct, but finalPriceView=1 above may change that.
+    # Is Agoda's room price before tax (false) or incl. taxes (true)? Proven
+    # "before": on 9 Oct (stay 10 Oct, WITH finalPriceView=1) every room card read
+    # "Per night before taxes & fees" (docs/site-findings.md). Re-check if Agoda changes.
     # The checker prints a "tax basis hint" line: if it says 'incl. taxes' /
     # 'including taxes', set true, so the price is held against Zen's final
     # incl. tax and Agoda's tax cannot hide a cheaper price.

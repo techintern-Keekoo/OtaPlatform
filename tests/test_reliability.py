@@ -228,15 +228,22 @@ def test_page_that_says_sold_out_is_a_full_house_not_a_broken_site(monkeypatch):
     assert [r.note for r in rows] == ["no OTA price (room sold out or not listed)"] * 2
 
 
-@pytest.mark.parametrize("text, rooms, full_house", [
-    ("Premium Cottage Sold out! Deluxe Mountain View Sold out!", 5, False),  # Agoda, 10 Oct: 2 of 5
-    ("Sold out! " * 5, 5, True),
-    ("Sorry, no rooms available for your dates", 5, True),
-    ("Deluxe Room 3,400 +193 taxes and fees", 5, False),
+@pytest.mark.parametrize("boxes, full_house", [
+    (["Premium Cottage Sold out!", "Deluxe Mountain View Sold out!", "Standard Garden View Room Rs 2,233"], False),
+    (["Premium Cottage Sold out!"] * 5, True),
+    ([], False),                                                   # no room boxes at all
+    (["Standard Room Rs 1,622 Likely to be fully booked soon!"], False),
 ])
-def test_only_a_whole_sold_out_page_counts_as_a_full_house(text, rooms, full_house):
-    from rate_parity.collectors.generic import _says_sold_out
-    assert _says_sold_out(text, rooms) is full_house
+def test_only_every_room_box_sold_out_counts_as_a_full_house(boxes, full_house):
+    from rate_parity.collectors.generic import all_say_sold_out
+    assert all_say_sold_out(boxes) is full_house
+
+
+def test_page_text_saying_sold_out_does_not_hide_a_broken_layout():
+    # Reviews and carousels say "sold out" / "fully booked"; only the room boxes count.
+    from rate_parity.collectors.generic import GenericCollector
+    site = dataclasses.replace(OTA, wait_for=None)
+    assert GenericCollector(site)._every_room_box_sold_out(None) is False
 
 
 def test_one_room_read_is_not_a_broken_site(monkeypatch):

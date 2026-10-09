@@ -253,12 +253,13 @@ def check_last_run(path: Path, now: datetime | None = None) -> Result:
     if age > LAST_RUN_MAX_AGE:
         return Result(WARN, "last run", f"last run finished {age.total_seconds() / 3600:.0f} h ago ({when})",
                       "check the PC was on and logged in; see Task Scheduler > Last Run Result")
-    broken = data.get("broken_sites") or []
+    broken = [*(data.get("broken_sites") or []), *(data.get("unchecked_sites") or [])]
     if status == "degraded":
-        sites = ", ".join(str(s) for s in broken) if isinstance(broken, list) and broken else "see report"
-        return Result(WARN, "last run", f"run at {when} was degraded (broken: {sites})",
-                      "run: python -m rate_parity check --site <key> for each broken site")
-    return Result(PASS, "last run", f"run at {when}: {status}")
+        sites = ", ".join(dict.fromkeys(str(s) for s in broken)) if broken else "see report"
+        return Result(WARN, "last run", f"run at {when} was degraded (problem sites: {sites})",
+                      "run: python -m rate_parity check --site <key> for each site, and read the report notes")
+    manual = " (manual --dry-run, not a scheduled run)" if data.get("dry_run") else ""
+    return Result(PASS, "last run", f"run at {when}: {status}{manual}")
 
 
 def check_browser(cfg: Config, offline: bool, launcher=None) -> Result:

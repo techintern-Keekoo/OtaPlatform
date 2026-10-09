@@ -82,9 +82,14 @@ class GenericCollector(Collector):
                 log.info("%s %s: no price on page (sold out or not listed?)", self.site.key, room_id)
         if self.card_taxes:  # evidence for finals decided from this one page load
             self.evidence = page.screenshot(f"list_{stay.checkin.isoformat()}")
-        # No price at all: a full house (Agoda prints "Sold out!") is not a broken site.
-        self.page_says_sold_out = not prices and _says_sold_out(page.body_text(), len(self.site.rooms))
+        # No price at all: a full house (Agoda prints "Sold out!" in the room box) is not a broken site.
+        self.page_says_sold_out = not prices and self._every_room_box_sold_out(page)
         return prices
+
+    def _every_room_box_sold_out(self, page: SafePage) -> bool:
+        if not self.site.wait_for:  # no room-box selector: cannot tell, so "broken" stays broken
+            return False
+        return all_say_sold_out(page.texts(self.site.wait_for, limit=100, width=100_000))
 
     def deep_check(self, page: SafePage, stay: Stay, room_id: str) -> Summary:
         room = self.site.rooms[room_id]
@@ -140,14 +145,11 @@ class GenericCollector(Collector):
         return text
 
 
-FULL_HOUSE_TEXTS = ("no rooms available", "fully booked", "no availability", "not available for your dates")
-
-
-def _says_sold_out(text: str, rooms: int) -> bool:
-    """Whole property sold out. Per-room "Sold out" must appear once per tracked
-    room: two sold-out cards on a page whose prices we failed to read is still broken."""
-    lowered = text.casefold()
-    return any(phrase in lowered for phrase in FULL_HOUSE_TEXTS) or lowered.count("sold out") >= rooms
+def all_say_sold_out(boxes: list[str]) -> bool:
+    """Full house only if there are room boxes and EVERY one says "sold out".
+    Page-wide text is not trusted: reviews ("it was fully booked"), calendars
+    and similar-hotel carousels say it too, and would hide a broken layout."""
+    return bool(boxes) and all("sold out" in box.casefold() for box in boxes)
 
 
 OFFER_WORDS = (("non-refundable", "non-refundable"), ("free cancellation", "free cancellation"),
