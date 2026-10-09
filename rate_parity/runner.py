@@ -13,7 +13,7 @@ from . import alerts, browser, report, storage
 from .collectors import make_collector
 from .compare import decide_status, gap_pct, is_suspect
 from .config import Config, Site
-from .models import CheckRow, Stay, Status, Summary
+from .models import SITE_BROKEN, CheckRow, Stay, Status, Summary
 from .safety import Blocked, SafetyViolation, self_check
 
 log = logging.getLogger(__name__)
@@ -82,6 +82,7 @@ class StayCheck:
         return self._web_summaries[room_id]
 
     def check_ota(self, ota: Site) -> list[CheckRow]:
+        loaded = False
         if not ota.ready:
             prices, note = None, "not set up yet (selectors still TODO in config)"
             self._offers, self._taxes, self._evidence = {}, {}, ""
@@ -89,8 +90,12 @@ class StayCheck:
             result, note = _attempt(self.quick, ota, lambda c, p: (
                 c.quick_scan(p, self.stay), getattr(c, "offer_types", {}),
                 getattr(c, "card_taxes", {}), getattr(c, "evidence", "")))
+            loaded = result is not None
             prices, self._offers, self._taxes, self._evidence = result if result else (None, {}, {}, "")
-        return [self._check_room(ota, room_id, prices, note) for room_id in ota.rooms]
+        rows = [self._check_room(ota, room_id, prices, note) for room_id in ota.rooms]
+        if loaded and rows and not any((prices or {}).get(room_id) is not None for room_id in ota.rooms):
+            _mark_site_broken(rows, ota)
+        return rows
 
     _offers: dict = {}
     _taxes: dict = {}
@@ -150,6 +155,16 @@ class StayCheck:
         return _finish(row, status, "; ".join(notes))
 
 
+def _mark_site_broken(rows: list[CheckRow], ota: Site) -> None:
+    """The page loaded but not one room price was read: most likely the site
+    changed its layout, not "everything sold out". Say so loudly."""
+    note = (f"{SITE_BROKEN} 0 of {len(rows)} rooms read on a loaded page - layout may have changed; "
+            f"run: python -m rate_parity check --site {ota.key}")
+    log.error("%s: %s", ota.label, note)
+    for row in rows:
+        _finish(row, Status.COULD_NOT_CHECK, note)
+
+
 def _finish(row: CheckRow, status: Status, note: str) -> CheckRow:
     row.status, row.note, row.checked_at = status, note, now_ist().isoformat(timespec="seconds")
     return row
@@ -184,12 +199,14 @@ def run(cfg: Config, only: str | None = None, dry_run: bool = False) -> list[Che
     with sync_playwright() as pw:
         quick = browser.open_quick_context(pw, cfg)
         try:
-            deep = browser.open_deep_context(pw, cfg)
+            # The logged-in profile costs memory and fails if another Chrome holds it:
+            # open it only when a checkout check really needs it (self_check runs then).
+            deep = browser.LazyContext(lambda: browser.open_deep_context(pw, cfg))
             try:
                 self_check(quick.guard)
-                self_check(deep.guard)
                 rows = check_all(cfg, quick, deep, only)
             finally:
+                log.info("agent profile opened this run: %s", "yes" if deep.opened else "no")
                 deep.close()
         finally:
             quick.close()
@@ -198,12 +215,25 @@ def run(cfg: Config, only: str | None = None, dry_run: bool = False) -> list[Che
 
 
 def _store_and_report(cfg: Config, rows: list[CheckRow], dry_run: bool) -> list[CheckRow]:
-    destination = storage.save_rows(rows, cfg, dry_run)
-    log.info("saved %d rows to %s", len(rows), destination)
+    """Save, show and send. If saving fails (e.g. the CSV is open in Excel) the
+    table and the WhatsApp summary still go out, then the error is raised."""
+    error = None
+    try:
+        destination = storage.save_rows(rows, cfg, dry_run)
+        log.info("saved %d rows to %s", len(rows), destination)
+    except Exception as exc:
+        log.exception("could not save the %d rows", len(rows))
+        error = exc
     when = now_ist()
     table = report.build_table(rows, when)
-    path = report.save_table(table, cfg.csv_path.parent, when)
     print(table)
-    log.info("price table saved to %s", path)
+    try:
+        path = report.save_table(table, cfg.csv_path.parent, when)
+        log.info("price table saved to %s", path)
+    except OSError as exc:
+        log.error("could not save the price table: %s", exc)
+        error = error or exc
     alerts.send_daily_summary(rows, cfg, when.date(), dry_run)
+    if error is not None:
+        raise error
     return rows

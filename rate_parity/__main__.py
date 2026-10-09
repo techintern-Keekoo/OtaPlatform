@@ -74,10 +74,34 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     from .runner import run
-    rows = run(cfg, only=args.only, dry_run=args.dry_run)
+    return _run_and_record(run, cfg, args)
+
+
+def _run_and_record(run, cfg, args) -> int:
+    """Run once, write output/last_run.json either way, and turn the result into
+    an exit code (0 ok, 1 crash, 2 config, 3 no website price, 4 site broken)."""
+    from . import health
+    from .alerts import send_failure
+    from .runner import now_ist
+
+    started = now_ist()
+    try:
+        rows = run(cfg, only=args.only, dry_run=args.dry_run)
+    except ConfigError as exc:  # e.g. a wrong --only key
+        print(f"Config error: {exc}", file=sys.stderr)
+        return health.CONFIG_ERROR
+    except Exception as exc:
+        logging.getLogger(__name__).exception("run FAILED")
+        finished = now_ist()
+        health.write_last_run(cfg.csv_path.parent, health.failed_run(exc, started, finished, args.dry_run))
+        send_failure(exc, cfg, finished, args.dry_run)
+        print(f"Run FAILED: {health.error_text(exc)}", file=sys.stderr)
+        return health.CRASH
+    health.write_last_run(cfg.csv_path.parent, health.last_run(rows, started, now_ist(), args.dry_run))
     counts = Counter(row.status.value for row in rows)
     print(f"{len(rows)} checks: " + ", ".join(f"{k}={v}" for k, v in sorted(counts.items())))
-    return 0
+    print(health.health_line(rows))
+    return health.exit_code(rows)
 
 
 if __name__ == "__main__":

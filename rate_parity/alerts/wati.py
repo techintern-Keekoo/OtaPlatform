@@ -15,7 +15,8 @@ from urllib.parse import urlsplit
 
 import requests
 
-from ..models import CheckRow, Status
+from ..health import broken_sites
+from ..models import SITE_BROKEN, CheckRow, Status
 
 log = logging.getLogger(__name__)
 
@@ -53,6 +54,9 @@ def build_summary(rows: list[CheckRow], day: date, include_could_not_check: bool
     parts = [f"Rate parity {day:%d-%b-%Y}: {len(rows)} checks"]
     parts += [f"{counts[s]} {s.value}" for s in Status if counts[s]]
     text = " | ".join(parts) + "."
+    broken = broken_sites(rows)
+    if broken:  # first and short: the agent itself needs fixing before its numbers can be trusted
+        text += " SITE BROKEN?: " + ", ".join(broken) + " (0 rooms read, run check --site)."
 
     violations = [
         f"{r.ota} {r.room} {r.checkin} {r.gap_pct}%" for r in rows if r.status is Status.VIOLATION
@@ -60,7 +64,8 @@ def build_summary(rows: list[CheckRow], day: date, include_could_not_check: bool
     if violations:
         text += " VIOLATIONS: " + "; ".join(violations) + "."
     if include_could_not_check:
-        actions = sorted({f"{r.ota}: {r.note}" for r in rows if r.status is Status.COULD_NOT_CHECK and r.note})
+        actions = sorted({f"{r.ota}: {r.note}" for r in rows if r.status is Status.COULD_NOT_CHECK
+                          and r.note and not r.note.startswith(SITE_BROKEN)})
         if actions:
             text += " NOT CHECKED: " + "; ".join(actions) + "."
 
