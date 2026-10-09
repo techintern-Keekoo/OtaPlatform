@@ -184,7 +184,10 @@ def test_profile_windows_lockfile_warns(tmp_path):
 
 
 def test_profile_linux_singleton_link_warns(tmp_path):
-    os.symlink("office-pc-1234", tmp_path / "SingletonLock")  # a link to nothing, as Chrome makes it
+    try:
+        os.symlink("office-pc-1234", tmp_path / "SingletonLock")  # a link to nothing, as Chrome makes it
+    except OSError:  # Windows without admin / Developer Mode (WinError 1314); this lock is Linux-only anyway
+        pytest.skip("this PC may not create symbolic links")
     assert doctor.check_profile(tmp_path).level == doctor.WARN
 
 
