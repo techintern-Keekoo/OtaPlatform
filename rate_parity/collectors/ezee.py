@@ -9,6 +9,11 @@ nothing is added to a cart, no guest details, no booking.
 Plan chosen per room: refundable (Prepaid_Noncancel_Nonrefundable == 0),
 bookable for this stay (showMinmsg == 0, i.e. no "need N more nights"),
 lowest total. Verified against the live site on 2026-10-08.
+
+Like for like: every candidate plan's numbers must add up (before tax + tax
+= total, within Rs 1), else the reply is refused: if they do not, we no
+longer know which number is which. No meal-plan field has been seen in the
+reply, so the chosen plan's name goes into the row note for a human to audit.
 """
 from __future__ import annotations
 
@@ -32,6 +37,7 @@ log = logging.getLogger(__name__)
 TIMEOUT = (10, 30)  # connect, read seconds
 SEARCH_PATH = "/booking/roomlisting.php"
 _RECORD_START = re.compile(r'\{"RateTypeId"')
+ADD_UP_TOLERANCE = Decimal("1")  # rupees: before tax + tax may miss the total by rounding only
 
 
 class EzeeCollector(Collector):
@@ -77,6 +83,8 @@ class EzeeCollector(Collector):
             and int(r.get("Prepaid_Noncancel_Nonrefundable", 1)) == 0
             and int(r.get("showMinmsg", 1)) == 0
         ]
+        for plan in plans:
+            _check_adds_up(plan, room_id)
         return min(plans, key=lambda r: _money(r["TotalPrice_InclusiveAll"]), default=None)
 
     def _records(self, stay: Stay) -> list[dict]:
@@ -140,6 +148,19 @@ def _check_adults(records: list[dict], stay: Stay) -> None:
         raise SelectorMissing("website: cannot read the guest count the engine searched for") from None
     if int(adults) != stay.adults:
         raise SelectorMissing(f"website searched for {adults} adults, stay needs {stay.adults}")
+
+
+def _check_adds_up(plan: dict, room_id: str) -> None:
+    """Before tax + tax must equal the total (within Rs 1), else refuse to guess."""
+    name = plan.get("Room_Name", "?")
+    try:
+        before, tax, total = (_money(plan[k]) for k in ("TotalPrice_ExclusiveAll", "TaxRate", "TotalPrice_InclusiveAll"))
+    except (KeyError, ArithmeticError, TypeError, ValueError):
+        raise SelectorMissing(f"website numbers do not add up for {room_id}: price, tax or total "
+                              f"missing in plan {name!r}") from None
+    if abs(before + tax - total) > ADD_UP_TOLERANCE:
+        raise SelectorMissing(f"website numbers do not add up for {room_id}: {before} + tax {tax} "
+                              f"!= total {total} (plan {name!r}); the engine reply may have changed")
 
 
 def _money(value) -> Decimal:

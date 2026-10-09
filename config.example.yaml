@@ -22,6 +22,17 @@ min_margin_pct: 0
 # report. false (option B): free cancellation only; other rooms show n/a.
 compare_non_refundable: true
 
+# Misread guard (optional; these are the defaults). An OTA price below
+# min_ratio x or above max_ratio x Zen's price for the same room (same tax
+# basis), or OTA taxes above max_tax_pct % of the OTA price, is more likely a
+# wrong number read from the page (old struck-out price, total for the stay,
+# "from" price) than a real price. Such a row is NEVER reported as LOWER!; it
+# shows VERIFY with "implausible price (...) - possible misread" in the note.
+sanity:
+  min_ratio: 0.4
+  max_ratio: 3.0
+  max_tax_pct: 30
+
 stay:
   days_ahead: [0, 1]    # check-in tonight and tomorrow night (IST), each run
   nights: 1
@@ -216,37 +227,45 @@ sites:
   goibibo:
     label: Goibibo
     enabled: true
+    # CANDIDATE, not verified. Goibibo is MakeMyTrip's sister site and the link
+    # below carries MMT's hotel id (mmtId), so this block copies the MakeMyTrip
+    # setup: same loading, same "read the room card text" method, MMT's room
+    # names. Goibibo blocked the Firecrawl read, so NOTHING here has been seen
+    # on a real Goibibo page. Every site-specific value starts "TODO-verify: ",
+    # so the agent keeps reporting Goibibo "not set up" until a human checks it:
+    #   python -m rate_parity check --config config.example.yaml --site goibibo --days 1
+    # The checker tries the candidates without the prefix. Delete a prefix only
+    # after the checker shows OK with the right price (docs/site-findings.md).
     scroll_to_load: true   # room list loads only after scrolling down
+    wait_for: "TODO-verify: [data-testid='rmType__roomName']"   # wait until room names are there
     allowed_domains: ["goibibo.com"]
-    # roomString = rooms-adults-children
+    # Check in the address bar too: dates as YYYYMMDD (date_format), and
+    # roomString = rooms-adults-children. Not verified on a real Goibibo page.
     search_url: "https://www.goibibo.com/hotels/hotel-details/?checkin={checkin}&checkout={checkout}&roomString=1-{adults}-0&locusId=CTKUU&locusType=city&cityCode=CTKUU&cc=IN&_uCurrency=INR&giHotelId=2508145749391752109&mmtId=202004271355036572"
     date_format: "%Y%m%d"
-    # Goibibo blocked the Firecrawl read. It shares MMT's listing (mmtId), so
-    # names are probably MMT's, but that is unverified.
+    logged_in_marker: null
+    login_wall_selectors: []
+    captcha_selectors: []
+    block_texts: []
     room_template:
-      search_price: "TODO"
-      steps: ["TODO"]
-      summary:
-        ready: "TODO: selector only present on the booking summary page"
-        room_name: "TODO"
-        meal_plan: "TODO"
-        cancellation: "TODO"
-        room_price: "TODO"
-        gst: "TODO"
-        fees: null
-        discount: null
-        final: "TODO: total payable incl. taxes"
+      # Same as MakeMyTrip: the innermost box holding this room's name AND its
+      # select button, then price and taxes read from its text. If Goibibo words
+      # the tax line differently, change the pattern: copy the line from the
+      # page text the checker saves.
+      price_text:
+        container: "TODO-verify: div:has([data-testid='rmType__roomName']:has-text('{room}')):has([data-testid$='-selectRoom']) >> nth=-1"
+        pattern: "TODO-verify: ₹\\s*(?P<price>[\\d,]+)\\s*\\+\\s*₹\\s*(?P<tax>[\\d,]+)\\s*Taxes\\s*&\\s*Fees"
     rooms:
       standard_garden:
-        labels: {room: "TODO", meal_plan: "TODO", cancellation: "Free cancellation"}
+        labels: {room: "TODO-verify: Standard Garden View Room", meal_plan: "TODO-verify: Room only", cancellation: "TODO-verify: Free cancellation"}
       deluxe_valley:
-        labels: {room: "TODO", meal_plan: "TODO", cancellation: "Free cancellation"}
+        labels: {room: "TODO-verify: Deluxe Valley Facing Room", meal_plan: "TODO-verify: Room only", cancellation: "TODO-verify: Free cancellation"}
       deluxe_mountain:
-        labels: {room: "TODO", meal_plan: "TODO", cancellation: "Free cancellation"}
+        labels: {room: "TODO-verify: Deluxe Mountain View Room", meal_plan: "TODO-verify: Room only", cancellation: "TODO-verify: Free cancellation"}
       family_suite:
-        labels: {room: "TODO", meal_plan: "TODO", cancellation: "Free cancellation"}
+        labels: {room: "TODO-verify: Family Suite with Mountain View", meal_plan: "TODO-verify: Room only", cancellation: "TODO-verify: Free cancellation"}
       premium_cottage:
-        labels: {room: "TODO", meal_plan: "TODO", cancellation: "Free cancellation"}
+        labels: {room: "TODO-verify: Premium Cottage Room", meal_plan: "TODO-verify: Room only", cancellation: "TODO-verify: Free cancellation"}
 
   agoda:
     label: Agoda
@@ -259,6 +278,12 @@ sites:
     # change both together. finalPriceView=1 asks Agoda to show the total price.
     search_url: "https://www.agoda.com/en-in/zen-manali-by-keekoo-stays/hotel/manali-in.html?checkIn={checkin}&los=1&adults={adults}&children=0&rooms=1&currencyCode=INR&finalPriceView=1"
     date_format: "%Y-%m-%d"
+    # Is Agoda's room price before tax (false) or incl. taxes (true)? Seen as
+    # "before taxes" on 8 Oct, but finalPriceView=1 above may change that.
+    # The checker prints a "tax basis hint" line: if it says 'incl. taxes' /
+    # 'including taxes', set true, so the price is held against Zen's final
+    # incl. tax and Agoda's tax cannot hide a cheaper price.
+    price_includes_tax: false
     logged_in_marker: null
     login_wall_selectors: []
     captcha_selectors: []
