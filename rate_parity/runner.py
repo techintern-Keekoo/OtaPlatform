@@ -175,9 +175,10 @@ class StayCheck:
             reason = implausible_reason(summary.room_price, web_search, summary.gst, self.cfg.sanity)
         if reason:
             return misread(reason)
+        summary.notes.extend(web.notes)  # the website plan's name, for a human to audit
         row.gap_pct = gap_pct(summary.final, web.final)
         status = decide_status(summary.final, web.final, self.cfg.min_margin_pct, suspect=True)
-        notes = summary.notes + [f"website screenshot: {web.screenshot_path}"] + web.notes
+        notes = summary.notes + [f"website screenshot: {web.screenshot_path}"]
         return _finish(row, status, "; ".join(notes))
 
 def _finish(row: CheckRow, status: Status, note: str) -> CheckRow:

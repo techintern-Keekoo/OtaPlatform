@@ -224,7 +224,7 @@ def test_checkout_violation_still_found_and_names_the_website_plan(monkeypatch):
     summary = Summary(final=D("1100"), room_price=D("950"), gst=D("150"), screenshot_path="o.png")
     row = check(monkeypatch, ota_price=D("950"), ota_summary=summary)
     assert row.status is Status.VIOLATION and row.gap_pct == D("-6.78")
-    assert row.note.endswith("website screenshot: web.html; website plan: Room Only Rate")
+    assert row.note.endswith("website plan: Room Only Rate; website screenshot: web.html")
 
 
 def test_sanity_limits_come_from_config(monkeypatch):
