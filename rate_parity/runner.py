@@ -181,6 +181,7 @@ class StayCheck:
         notes = summary.notes + [f"website screenshot: {web.screenshot_path}"]
         return _finish(row, status, "; ".join(notes))
 
+
 def _finish(row: CheckRow, status: Status, note: str) -> CheckRow:
     row.status, row.note, row.checked_at = status, note, now_ist().isoformat(timespec="seconds")
     return row
