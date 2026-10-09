@@ -13,6 +13,7 @@ from urllib.parse import urlsplit
 
 import yaml
 
+from .compare import SanityLimits
 from .models import RoomKey, Stay
 from .safety import DEFAULT_COMMIT_PATH_PATTERNS, host_allowed
 
@@ -70,6 +71,9 @@ class Site:
     scroll_to: str | None = None   # then scroll this element on screen (e.g. the room-list heading)
     wait_for: str | None = None    # then wait for this (e.g. a room box); reload once if it never comes
     ezee_hotel: str | None = None
+    # True: the OTA's search price already includes taxes, so it is held against
+    # Zen's final (incl. tax), not Zen's before-tax price. Default: before tax.
+    price_includes_tax: bool = False
 
     def search_url_for(self, stay: Stay) -> str:
         return (
@@ -115,6 +119,7 @@ class Config:
     alert_param_name: str
     alert_include_could_not_check: bool
     alert_max_chars: int
+    sanity: SanityLimits = SanityLimits()  # misread guard: see compare.implausible_reason
 
     @property
     def website(self) -> Site:
@@ -289,6 +294,7 @@ def _site(key: str, data: dict, rooms: dict[str, RoomKey]) -> Site:
         scroll_to_load=_get(data, "scroll_to_load", where, bool, False),
         scroll_to=_get(data, "scroll_to", where, str, None),
         wait_for=_get(data, "wait_for", where, str, None),
+        price_includes_tax=_get(data, "price_includes_tax", where, bool, False),
         rooms=site_rooms,
     )
 
@@ -348,6 +354,32 @@ def _validate_sites(sites: dict[str, Site]) -> None:
         missing = set(site.rooms) - set(website.rooms) if site.enabled else set()
         if missing:
             raise ConfigError(f"sites.{site.key} rooms not mapped on website: {sorted(missing)}")
+
+
+_SANITY_KEYS = ("min_ratio", "max_ratio", "max_tax_pct")
+
+
+def _sanity(raw: dict) -> SanityLimits:
+    """Optional block; defaults when absent. Values must keep "OTA == Zen" plausible."""
+    data = _get(raw, "sanity", "config", dict, {})
+    unknown = sorted(str(k) for k in data if k not in _SANITY_KEYS)  # catches typos like max_ratio_pct
+    if unknown:
+        raise ConfigError(f"sanity has unknown keys {unknown}; allowed: {', '.join(_SANITY_KEYS)}")
+    values = {}
+    for key in _SANITY_KEYS:
+        value = _get(data, key, "sanity", (int, float), None)
+        if isinstance(value, bool):
+            raise ConfigError(f"sanity.{key} must be a number")
+        if value is not None:
+            if value != value or value in (float("inf"), float("-inf")):  # YAML .nan / .inf
+                raise ConfigError(f"sanity.{key} must be a finite number")
+            values[key] = Decimal(str(value))
+    limits = SanityLimits(**values)
+    if not 0 < limits.min_ratio < 1 < limits.max_ratio:
+        raise ConfigError("sanity: need 0 < min_ratio < 1 < max_ratio (e.g. 0.4 and 3.0)")
+    if not 0 < limits.max_tax_pct <= 100:
+        raise ConfigError("sanity.max_tax_pct must be above 0 and at most 100")
+    return limits
 
 
 def parse_config(raw: dict, check_placeholders: bool = True) -> Config:
@@ -417,6 +449,7 @@ def parse_config(raw: dict, check_placeholders: bool = True) -> Config:
         alert_param_name=_get(alerts, "template_param_name", "alerts", str, "summary"),
         alert_include_could_not_check=_get(alerts, "include_could_not_check", "alerts", bool, True),
         alert_max_chars=_get(alerts, "max_chars", "alerts", int, 900),
+        sanity=_sanity(raw),
     )
 
 

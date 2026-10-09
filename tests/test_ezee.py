@@ -136,3 +136,66 @@ def test_search_outside_allowlist_is_refused(tmp_path):
     c = EzeeCollector(site, session=FakeSession(LIVE_LIKE), evidence_dir=tmp_path)
     with pytest.raises(SafetyViolation):
         c.quick_scan(None, STAY)
+
+
+# --- like for like: the website's own numbers must add up ----------------------
+
+def test_plan_numbers_that_do_not_add_up_are_refused(tmp_path):
+    # 1,545.60 + 77.28 = 1,622.88, but the total says 1,700: which number is the price?
+    c, _ = collector(reply(record("4757200000000000001", "Plan", 1545.6, 77.28, 1700.0)), tmp_path)
+    assert c.quick_scan(None, STAY) == {}  # that room has no price; the reason is kept for its row
+    assert c.room_errors["standard"].startswith("website numbers do not add up for standard")
+    with pytest.raises(SelectorMissing, match="do not add up"):
+        c.deep_check(None, STAY, "standard")
+
+
+def test_rounding_within_one_rupee_is_accepted(tmp_path):
+    c, _ = collector(reply(record("4757200000000000001", "Plan", 1545.6, 77.28, 1623.5)), tmp_path)
+    assert c.deep_check(None, STAY, "standard").final == D("1623.50")
+
+
+def test_missing_tax_is_refused_not_guessed(tmp_path):
+    bad = record("4757200000000000001", "Plan", 1545.6, 77.28, 1622.88)
+    del bad["TaxRate"]
+    c, _ = collector(reply(bad), tmp_path)
+    assert c.quick_scan(None, STAY) == {}
+    assert "price, tax or total missing" in c.room_errors["standard"]
+
+
+def test_every_candidate_plan_must_add_up_not_only_the_cheapest(tmp_path):
+    c, _ = collector(reply(
+        record("4757200000000000001", "Plan A", 1545.6, 77.28, 1622.88),
+        record("4757200000000000001", "Plan B", 1600.0, 80.0, 1900.0),  # broken: the reply format may have changed
+    ), tmp_path)
+    # A corrupt total on any candidate could hide the real cheapest plan: refuse the room.
+    assert c.quick_scan(None, STAY) == {} and "Plan B" in c.room_errors["standard"]
+
+
+def test_plans_never_chosen_are_not_checked(tmp_path):
+    c, _ = collector(reply(
+        record("4757200000000000001", "Plan A", 1545.6, 77.28, 1622.88),
+        record("4757200000000000001", "Non-refundable", 1400.0, 70.0, 9999.0, nonref=1),
+        record("4757200000000000001", "3 Min Nights", 1435.2, 71.76, 1.0, minmsg=2),
+    ), tmp_path)
+    assert c.quick_scan(None, STAY) == {"standard": D("1545.60")}
+
+
+def test_chosen_plan_name_is_given_for_audit(tmp_path):
+    # The reply has no meal-plan field we have seen, so the plan's name is shown instead.
+    c, _ = collector(LIVE_LIKE, tmp_path)
+    assert c.deep_check(None, STAY, "standard").notes == ["website plan: Book now! Save now! With Complimentary Wi-Fi"]
+
+
+def test_plan_note_shows_the_room_description_with_its_meal_plan():
+    from rate_parity.collectors.ezee import _plan_note
+    plan = {"Room_Name": "Book now! Save now!", "Room_Description": "Standard garden view room  EP"}
+    assert _plan_note(plan) == "website plan: Book now! Save now! (Standard garden view room EP)"
+
+
+def test_one_odd_room_does_not_black_out_the_others(tmp_path):
+    c, _ = collector(reply(
+        record("4757200000000000001", "Plan", 1545.6, 77.28, 1700.0),      # standard: does not add up
+        record("4757200000000000002", "Plan", 1876.56, 93.83, 1970.39),    # valley: fine
+    ), tmp_path)
+    assert c.quick_scan(None, STAY) == {"valley": D("1876.56")}
+    assert "do not add up" in c.room_errors["standard"]

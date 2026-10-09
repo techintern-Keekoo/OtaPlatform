@@ -125,3 +125,97 @@ The room table already shows "₹N + ₹M taxes and charges" (and Genius prices 
 | 1. Office PC real Chrome (recommended first) | Likely works: the page is a JavaScript app that Firecrawl never rendered (we got the generic shell twice), not a hard block | Possible: strong bot protection; try once by hand with the agent profile |
 | 2. Use MakeMyTrip as a proxy | Same company and same listing (`mmtId=202004271355036572` in the link), so prices are usually identical. Unverified: report as "via MMT", never as a Goibibo check | n/a |
 | 3. Manual weekly spot-check | Fallback | Fallback if the office PC is blocked too |
+
+## Goibibo: candidate setup (copied from MakeMyTrip, NOT verified)
+
+Goibibo is in the MakeMyTrip group and its hotel link carries MMT's id
+(`mmtId=202004271355036572`), so `config.example.yaml` now holds a Goibibo
+block that mirrors the working MakeMyTrip one: scroll, wait for room names,
+read price and taxes from each room card's text, MMT's room names. Every
+site-specific value starts with `TODO-verify: `, so a normal run still says
+Goibibo is "not set up" and never opens it.
+
+To confirm on the office PC (agent's Chrome, venv active):
+
+    python -m rate_parity check --config config.example.yaml --site goibibo --days 1
+
+The checker tries every candidate without its `TODO-verify: ` prefix. Confirm:
+
+1. The page is the Zen Manali hotel page for the right dates and 2 adults
+   (title, URL and screenshot). If it is the Goibibo home page, the link
+   (`search_url`, `date_format: "%Y%m%d"`) needs fixing first.
+2. `wait_for` works: the room list loads (no "room list did not load" NOTE).
+3. Each of the 5 rooms shows `OK  price N + taxes M`, and N and M match what
+   the screenshot shows for that room's free-cancellation, room-only offer
+   (not the struck-out old price, not an "Upgrade" box).
+4. Room names: if a room is MISSING, look at "room names seen" / the saved
+   page text and copy Goibibo's exact name into that room's `labels.room`.
+5. The tax line: if Goibibo words it differently from "+ ₹ N Taxes & Fees",
+   copy the line from the saved `.txt` page text and adjust `pattern`.
+
+Then delete every `TODO-verify: ` in the Goibibo block, run the check again,
+and finally `python -m rate_parity run --config config.example.yaml --only goibibo --dry-run`.
+Until then, never report Goibibo prices "via MMT" as a Goibibo check.
+
+## Accuracy guards (added 2026-10-09)
+
+- **Misread guard.** An OTA price below 40% or above 300% of Zen's price (same
+  tax basis), or OTA taxes above 30% of the OTA price, is treated as a
+  probable misread: the row shows `VERIFY` with "implausible price (...) -
+  possible misread", never `LOWER!`. Limits: `sanity:` in config.
+- **Website numbers must add up.** eZee's before-tax price + tax must equal
+  its total within Rs 1, or the website price for that night is refused
+  (every row says "website numbers do not add up").
+- **Website meal plan.** The eZee reply has no meal-plan field that we have
+  seen (only `Room_Name`, the plan's name). Rows with a verdict now end with
+  `website plan: <name>` so a human can check the plan is room-only. If a
+  plan with breakfast is ever chosen, tell the developer: the plan rule
+  (refundable, 1-night, cheapest) would need a meal-plan filter.
+- **Tax basis.** `price_includes_tax: true` on an OTA makes the agent compare
+  its search price with Zen's final incl. tax. The checker prints a
+  "tax basis hint" line (phrases such as 'incl. taxes', 'excl. taxes',
+  '+ taxes', 'taxes & fees', 'price per night' found on the page). For
+  Agoda, confirm the basis with it: the 8 Oct scrape said "before taxes", but
+  the agent's link asks for `finalPriceView=1`.
+
+## Live evidence, 9 Oct 2026 (stay 10–11 Oct, 2 adults)
+
+Gathered through Composio: a direct HTTP call from its sandbox for eZee, and
+Firecrawl snapshots (location India) for the OTAs. These were not taken on the
+office PC, so every OTA selector below still needs one `check --site` there.
+
+| Room | Zen before tax (+tax) | Agoda before tax | MakeMyTrip before tax + taxes & fees | Booking.com price + taxes |
+|---|---|---|---|---|
+| Standard Garden | 1,622.88 (+81.14) | 2,233 (cancellation policy) | 1,622 + 230 | 3,400.32 + 193 (non-ref) |
+| Deluxe Valley | 1,876.56 (+93.83) | 2,583 (non-ref) | 1,876 + 265 | 3,931.84 + 223 (non-ref) |
+| Deluxe Mountain | 2,282.28 (+114.11) | sold out | 2,281 + 323 | 4,781.92 + 272 (non-ref) |
+| Family Suite | 3,144.54 (+157.23) | 4,334 (cancellation policy) | 3,142 + 445 | 6,588.56 + 374 (non-ref) |
+| Premium Cottage | 2,789.22 (+139.46) | sold out | 2,787 + 395 | 5,844.08 + 332 (non-ref) |
+
+What this proves:
+- **eZee:** for all 36 records, the price incl. tax equals the price before tax
+  plus the tax (5% GST), so the add-up guard is safe. There is no meal-plan
+  field: `Room_Name` is the rate-plan name, and `Room_Description` ends in
+  `EP` (European Plan = room only) for all 5 tracked rooms. Each room has 2
+  plans, both refundable; one is "3 Min Nights", which the agent skips.
+- **eZee has a 6th room type, `4757200000000000004` "Quadruple dom room EP",**
+  which is not tracked. Agoda, MakeMyTrip and Booking.com all sell it as
+  "Quadruple Room". Keekoo decides whether to track it.
+- **Agoda's price is before tax:** each card says "Per night before taxes &
+  fees", even with `finalPriceView=1`, so `price_includes_tax: false` is right.
+  Agoda showed Deluxe Mountain and Premium Cottage sold out while eZee had 6
+  and 3 rooms free: check that the channel manager pushes stock to Agoda.
+- **MakeMyTrip:** the current `price_text` read all 5 rooms, and the page for
+  tomorrow (the "night 2" that fails on the office PC) loaded normally. So the
+  office-PC failure is more likely MMT reacting to a second quick visit than
+  rooms being sold out. Before tax, MMT is Rs 1–2 **below** Zen (whole rupees
+  vs paise); with taxes and fees, Zen is about 9% cheaper. The agent compares
+  finals for MMT, so this is correctly "ok".
+- **Booking.com:** the old candidates could not work. The tax is the class
+  `.prd-taxes-and-fees-under-price`, not a `data-testid`, and `.hprt-conditions`
+  does not exist. The new `price_text` (room row → "price +₹ tax taxes and fees")
+  read 5/5 rooms on the snapshot. Each room had one row (non-refundable only).
+  When a room has several rate plans, only its first row carries the room
+  name, so the first (usually cheapest) plan is the one compared.
+- **Goibibo:** Firecrawl was redirected to the Goibibo home page. **Cleartrip:**
+  every Firecrawl engine was blocked. Both can only be set up from the office PC.

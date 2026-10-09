@@ -9,7 +9,8 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-from .models import CheckRow, Status
+from .health import broken_sites
+from .models import SITE_BROKEN, CheckRow, Status
 
 TAGS = {
     Status.IN_PARITY: "ok",
@@ -30,6 +31,8 @@ def _price(before, final) -> str:
 def _cell(r) -> str:
     if r.status is Status.COULD_NOT_CHECK and r.search_price is not None:
         tag = "VERIFY"  # OTA price not above Zen, but checkout not confirmed
+    elif r.note.startswith(SITE_BROKEN):
+        tag = "BROKEN?"  # page loaded, no price read: layout may have changed
     else:
         tag = TAGS[r.status]
     return f"{_price(r.search_price, r.final_payable)} {tag}{SHORT_OFFER.get(r.ota_offer.lower(), '')}"
@@ -47,6 +50,7 @@ def build_table(rows: list[CheckRow], when: datetime) -> str:
         "The verdict uses the final when both finals are known, else the before-tax price.",
         "ok = Zen is cheaper | LOWER! = OTA equal/cheaper (confirmed) | VERIFY = OTA looks equal/cheaper, check by hand",
         "n/a = no price (sold out / not set up) | non-ref = only non-refundable offer | policy = 'cancellation policy' offer",
+        "BROKEN? = the OTA page loaded but no room price was read (site layout may have changed)",
     ]
     nights = list(dict.fromkeys(r.checkin for r in rows))
     for night in nights:
@@ -70,6 +74,11 @@ def build_table(rows: list[CheckRow], when: datetime) -> str:
     not_set_up = sorted({r.ota for r in rows if r.status is Status.COULD_NOT_CHECK and "not set up" in r.note})
     if not_set_up:
         lines.append("Not set up yet: " + ", ".join(not_set_up))
+    broken = broken_sites(rows)
+    if broken:
+        lines.append("SITE BROKEN? (page loaded, 0 rooms read - layout may have changed): " + ", ".join(broken))
+        lines += [f"  run: python -m rate_parity check --config config.example.yaml --site {key}"
+                  for key in broken.values()]
     return "\n".join(lines)
 
 

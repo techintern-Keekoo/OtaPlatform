@@ -373,8 +373,10 @@ def test_never_clicks_book_and_nothing_reaches_a_payment_host(e2e):
     seen_urls = [url for _, url, _ in e2e["web"].seen]
     assert not any("__clicked__" in u or "api.razorpay.com/pay" in u for u in seen_urls)  # no button fired
 
-    # both contexts had the real guard, and the run passed self_check
-    assert len(e2e["contexts"]) == 2 and all(c.guard.installed for c in e2e["contexts"])
+    # the search context had the real guard and passed self_check; no checkout check was
+    # needed (MakeMyTrip finals come from its room list), so the logged-in profile never opened
+    assert len(e2e["contexts"]) == 1 and all(c.guard.installed for c in e2e["contexts"])
+    assert not e2e["cfg"].browser.profile_dir.exists()
     log = e2e["guard_log"]
     # what the pages tried on their own was stopped by the real guard
     aborted = [url for kind, _, url in log if kind == "aborted"]

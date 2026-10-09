@@ -107,6 +107,30 @@ Runs 3 times a day: **10:00, 18:00 and 22:00** (the PC's clock, keep it on IST).
 
 An OTA that still has `TODO` in the config shows as "not set up" in the table and is never opened, so the website and the ready OTAs keep running. Use `python -m rate_parity check --config config.yaml --site <key>` to verify an OTA's selectors.
 
+## Before go-live
+
+On the office PC, in the project folder with the venv active:
+
+1. `git pull`, then `python -m pytest -q` (all tests must pass).
+2. Double-click `scripts\doctor.bat` (or run
+   `python -m rate_parity doctor --config config.example.yaml`). It only looks:
+   it changes nothing and never books. Fix every `FAIL` line and read every
+   `WARN` line; each line says the fix. It exits 1 while any check FAILs.
+   `--offline` skips the browser start and the website search.
+3. `python -m rate_parity alert-test --config config.example.yaml --to 9198XXXXXXXX`
+   sends one WhatsApp test message to that number ("sent to 1 of 1"). Without
+   `--to` it goes to everyone in `WATI_RECIPIENTS`.
+4. `python -m rate_parity run --config config.example.yaml --dry-run` once and
+   read the price table.
+5. Double-click `scripts\install_schedule.bat`. After the next scheduled time,
+   run doctor again: the `last run` and `schedule` lines should PASS, and Task
+   Scheduler's "Last Run Result" should be `0x0`. Other values: `0x3` = no Zen
+   website price (nothing could be compared), `0x4` = an OTA gave no price for a
+   night: its layout changed, or it was not checked (room list did not load,
+   CAPTCHA, login wall); run `check --site`, `0x1` = the run crashed,
+   `0x2` = config error. Details: `output\last_run.json` and `output\agent.log`
+   (moved to `agent.log.1` when it passes 5 MB).
+
 ## Open questions before go-live
 
 - [x] **Booking engine:** eZee (Yanolja) at `book.zenhotels.in`. Dates cannot be set from the URL; see `docs/site-findings.md`. Still needed: the eZee API key or a deep-link parameter.

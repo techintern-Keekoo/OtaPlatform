@@ -197,3 +197,20 @@ def test_room_template_rejects_quotes_in_labels():
 def test_agoda_quick_scan_ready_while_checkout_check_is_not():
     agoda = load_config(EXAMPLE).sites["agoda"]
     assert agoda.ready and not agoda.deep_ready  # prices run; a suspect becomes "verify manually"
+
+
+def test_locked_csv_rows_go_to_a_pending_file(tmp_path, monkeypatch):
+    # Windows: rate_parity.csv open in Excel -> PermissionError. The rows must not be lost.
+    from rate_parity.storage import csv_store
+    target = tmp_path / "rate_parity.csv"
+    real_write = csv_store._write
+
+    def locked(cells, path):
+        if path == target:
+            raise PermissionError("in use by another process")
+        real_write(cells, path)
+
+    monkeypatch.setattr(csv_store, "_write", locked)
+    written = csv_store.append([["a", "b"]], target)
+    assert written != target and written.name.startswith("rate_parity_pending_")
+    assert written.read_text(encoding="utf-8").splitlines()[1] == "a,b"

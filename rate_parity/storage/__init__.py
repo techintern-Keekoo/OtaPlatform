@@ -43,5 +43,4 @@ def save_rows(rows: list[CheckRow], cfg: Config, dry_run: bool) -> str:
             return "sheets"
         except Exception as exc:
             log.error("Google Sheets write failed, using CSV fallback: %s", type(exc).__name__)
-    csv_store.append(cells, cfg.csv_path)
-    return str(cfg.csv_path)
+    return str(csv_store.append(cells, cfg.csv_path))
