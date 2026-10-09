@@ -1,6 +1,7 @@
 """Pure comparison rules. Decimal in, Decimal/Status out. No I/O."""
 from __future__ import annotations
 
+from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 
 from .models import RoomKey, Status
@@ -73,3 +74,46 @@ def decide_status(
     if _raw_gap_pct(ota_final, website_final) <= min_margin_pct:
         return Status.VIOLATION
     return Status.FALSE_ALARM if suspect else Status.IN_PARITY
+
+
+@dataclass(frozen=True)
+class SanityLimits:
+    """How far an OTA price may sit from Zen's before we suspect a misread.
+
+    A real OTA price is rarely below 40% or above 3x Zen's for the same room:
+    numbers outside that are more likely an old (struck-out) price, a per-stay
+    total, a "from" price or a bad parse. Taxes above 30% of the price are
+    not Indian hotel GST (5-18%) plus normal fees.
+    """
+    min_ratio: Decimal = Decimal("0.4")
+    max_ratio: Decimal = Decimal("3.0")
+    max_tax_pct: Decimal = Decimal("30")
+
+
+def implausible_reason(
+    ota_price: Decimal,
+    zen_price: Decimal,
+    ota_tax: Decimal | None = None,
+    limits: SanityLimits = SanityLimits(),
+) -> str | None:
+    """Why these numbers look like a misread, or None if they look normal.
+
+    ota_price and zen_price must be on the same basis (both before tax, or
+    both incl. tax). ota_tax, when given, is checked against ota_price.
+    """
+    _require_decimal(ota_price, zen_price)
+    if zen_price <= 0:
+        return f"Zen price {zen_price} is not positive"
+    if ota_price <= 0:
+        return f"OTA price {ota_price} is not positive"
+    ratio = ota_price / zen_price
+    if not limits.min_ratio <= ratio <= limits.max_ratio:
+        return (f"OTA {ota_price:,.0f} is {ratio * _HUNDRED:.0f}% of Zen {zen_price:,.0f}; "
+                f"expected {limits.min_ratio * _HUNDRED:.0f}-{limits.max_ratio * _HUNDRED:.0f}%")
+    if ota_tax is not None:
+        _require_decimal(ota_tax)
+        tax_pct = ota_tax / ota_price * _HUNDRED
+        if not 0 <= tax_pct <= limits.max_tax_pct:
+            return (f"OTA taxes {ota_tax:,.0f} are {tax_pct:.0f}% of the OTA price {ota_price:,.0f}; "
+                    f"expected 0-{limits.max_tax_pct:.0f}%")
+    return None

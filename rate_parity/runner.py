@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 
 from . import alerts, browser, report, storage
 from .collectors import make_collector
-from .compare import decide_status, gap_pct, is_suspect
+from .compare import decide_status, gap_pct, implausible_reason, is_suspect
 from .config import Config, Site
 from .models import CheckRow, Stay, Status, Summary
 from .safety import Blocked, SafetyViolation, self_check
@@ -108,15 +108,40 @@ class StayCheck:
         row.website_search_price = web_search
         row.search_price = (ota_prices or {}).get(room_id)
         row.ota_offer = self._offers.get(room_id, "") if row.search_price is not None else ""
+        web_plan = []  # which website rate plan Zen's price is, so a human can audit it (meal plan etc.)
         if web_search is not None and not getattr(self.web_collector, "needs_browser", True):
             web, _ = self.website_summary(room_id)  # eZee: same cached search, no extra request
             row.website_final = web.final if web else None
+            web_plan = web.notes if web else []
         if web_search is None:
             return _finish(row, Status.COULD_NOT_CHECK, self.web_note or "website search price not found")
         if row.search_price is None:
             return _finish(row, Status.COULD_NOT_CHECK, ota_note or "no OTA price (room sold out or not listed)")
-        suspect = is_suspect(row.search_price, web_search, self.cfg.min_margin_pct)
-        tax = self._taxes.get(room_id)
+
+        def verdict(status: Status, note: str) -> CheckRow:
+            return _finish(row, status, "; ".join([note, *web_plan]))
+
+        def misread(reason: str) -> CheckRow:  # numbers that look misread are never a VIOLATION
+            log.warning("%s %s %s: implausible price (%s)", ota.key, room_id, row.checkin, reason)
+            return _finish(row, Status.COULD_NOT_CHECK,
+                           f"possible violation, verify manually: implausible price ({reason}) - possible misread")
+
+        # Like for like: a price shown incl. tax is held against Zen's final, not
+        # Zen's before-tax price (else the OTA's tax would hide a violation).
+        zen_basis = web_search
+        if ota.price_includes_tax:
+            if row.website_final is None:
+                web, _ = self.website_summary(room_id)
+                row.website_final = web.final if web else None
+            if row.website_final is None:
+                return _finish(row, Status.COULD_NOT_CHECK, "possible violation, verify manually: "
+                               "OTA price includes tax but Zen's final (incl. tax) was not found")
+            zen_basis = row.website_final
+        tax = None if ota.price_includes_tax else self._taxes.get(room_id)
+        reason = implausible_reason(row.search_price, zen_basis, tax, self.cfg.sanity)
+        if reason:
+            return misread(reason)
+        suspect = is_suspect(row.search_price, zen_basis, self.cfg.min_margin_pct)
         if tax is not None and row.website_final is not None:
             # The room list shows price AND taxes (MakeMyTrip): final is known from the
             # same page load, so no second visit. Both numbers were read from the page.
@@ -125,9 +150,10 @@ class StayCheck:
             row.gap_pct = gap_pct(row.final_payable, row.website_final)
             row.screenshot_path = self._evidence
             status = decide_status(row.final_payable, row.website_final, self.cfg.min_margin_pct, suspect=suspect)
-            return _finish(row, status, "final = price + taxes & fees shown on the room list (one page load)")
+            return verdict(status, "final = price + taxes & fees shown on the room list (one page load)")
         if not suspect:
-            return _finish(row, Status.IN_PARITY, "OTA search price above Zen")
+            basis = " (both incl. tax)" if ota.price_includes_tax else ""
+            return verdict(Status.IN_PARITY, f"OTA search price above Zen{basis}")
 
         if not ota.deep_ready:
             return _finish(row, Status.COULD_NOT_CHECK,
@@ -144,11 +170,15 @@ class StayCheck:
         row.checkout_room_price, row.gst = summary.room_price, summary.gst
         row.fees, row.discount, row.final_payable = summary.fees, summary.discount, summary.final
         row.screenshot_path = summary.screenshot_path
+        reason = implausible_reason(summary.final, web.final, None, self.cfg.sanity)
+        if reason is None and summary.room_price is not None and summary.gst is not None:
+            reason = implausible_reason(summary.room_price, web_search, summary.gst, self.cfg.sanity)
+        if reason:
+            return misread(reason)
         row.gap_pct = gap_pct(summary.final, web.final)
         status = decide_status(summary.final, web.final, self.cfg.min_margin_pct, suspect=True)
-        notes = summary.notes + [f"website screenshot: {web.screenshot_path}"]
+        notes = summary.notes + [f"website screenshot: {web.screenshot_path}"] + web.notes
         return _finish(row, status, "; ".join(notes))
-
 
 def _finish(row: CheckRow, status: Status, note: str) -> CheckRow:
     row.status, row.note, row.checked_at = status, note, now_ist().isoformat(timespec="seconds")
