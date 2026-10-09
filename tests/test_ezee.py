@@ -184,3 +184,9 @@ def test_chosen_plan_name_is_given_for_audit(tmp_path):
     # The reply has no meal-plan field we have seen, so the plan's name is shown instead.
     c, _ = collector(LIVE_LIKE, tmp_path)
     assert c.deep_check(None, STAY, "standard").notes == ["website plan: Book now! Save now! With Complimentary Wi-Fi"]
+
+
+def test_plan_note_shows_the_room_description_with_its_meal_plan():
+    from rate_parity.collectors.ezee import _plan_note
+    plan = {"Room_Name": "Book now! Save now!", "Room_Description": "Standard garden view room  EP"}
+    assert _plan_note(plan) == "website plan: Book now! Save now! (Standard garden view room EP)"

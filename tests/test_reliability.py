@@ -221,6 +221,24 @@ def test_loaded_page_with_no_price_marks_every_room_site_broken(monkeypatch):
     assert all(r.website_search_price == D("10000") for r in rows)  # Zen still shown
 
 
+def test_page_that_says_sold_out_is_a_full_house_not_a_broken_site(monkeypatch):
+    monkeypatch.setattr(FakeCollector, "ota_prices", {})
+    monkeypatch.setattr(FakeCollector, "page_says_sold_out", True, raising=False)
+    rows = check(browser.LazyContext(Opener()))
+    assert [r.note for r in rows] == ["no OTA price (room sold out or not listed)"] * 2
+
+
+@pytest.mark.parametrize("text, rooms, full_house", [
+    ("Premium Cottage Sold out! Deluxe Mountain View Sold out!", 5, False),  # Agoda, 10 Oct: 2 of 5
+    ("Sold out! " * 5, 5, True),
+    ("Sorry, no rooms available for your dates", 5, True),
+    ("Deluxe Room 3,400 +193 taxes and fees", 5, False),
+])
+def test_only_a_whole_sold_out_page_counts_as_a_full_house(text, rooms, full_house):
+    from rate_parity.collectors.generic import _says_sold_out
+    assert _says_sold_out(text, rooms) is full_house
+
+
 def test_one_room_read_is_not_a_broken_site(monkeypatch):
     monkeypatch.setattr(FakeCollector, "ota_prices", {"r1": D("12000")})
     rows = check(browser.LazyContext(Opener()))

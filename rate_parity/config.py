@@ -371,6 +371,8 @@ def _sanity(raw: dict) -> SanityLimits:
         if isinstance(value, bool):
             raise ConfigError(f"sanity.{key} must be a number")
         if value is not None:
+            if value != value or value in (float("inf"), float("-inf")):  # YAML .nan / .inf
+                raise ConfigError(f"sanity.{key} must be a finite number")
             values[key] = Decimal(str(value))
     limits = SanityLimits(**values)
     if not 0 < limits.min_ratio < 1 < limits.max_ratio:

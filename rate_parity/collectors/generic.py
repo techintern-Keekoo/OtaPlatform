@@ -82,6 +82,8 @@ class GenericCollector(Collector):
                 log.info("%s %s: no price on page (sold out or not listed?)", self.site.key, room_id)
         if self.card_taxes:  # evidence for finals decided from this one page load
             self.evidence = page.screenshot(f"list_{stay.checkin.isoformat()}")
+        # No price at all: a full house (Agoda prints "Sold out!") is not a broken site.
+        self.page_says_sold_out = not prices and _says_sold_out(page.body_text(), len(self.site.rooms))
         return prices
 
     def deep_check(self, page: SafePage, stay: Stay, room_id: str) -> Summary:
@@ -136,6 +138,16 @@ class GenericCollector(Collector):
         if text is None:
             raise SelectorMissing(f"summary selector not found: {selector}")
         return text
+
+
+FULL_HOUSE_TEXTS = ("no rooms available", "fully booked", "no availability", "not available for your dates")
+
+
+def _says_sold_out(text: str, rooms: int) -> bool:
+    """Whole property sold out. Per-room "Sold out" must appear once per tracked
+    room: two sold-out cards on a page whose prices we failed to read is still broken."""
+    lowered = text.casefold()
+    return any(phrase in lowered for phrase in FULL_HOUSE_TEXTS) or lowered.count("sold out") >= rooms
 
 
 OFFER_WORDS = (("non-refundable", "non-refundable"), ("free cancellation", "free cancellation"),

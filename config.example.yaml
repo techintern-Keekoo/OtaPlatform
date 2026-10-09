@@ -152,38 +152,37 @@ sites:
     # From the property link; affiliate/session params (aid, label, sid, srpvid, blocks) removed.
     search_url: "https://www.booking.com/hotel/in/keekoo-manali-manali.html?checkin={checkin}&checkout={checkout}&group_adults={adults}&group_children=0&no_rooms=1&req_adults={adults}&req_children=0"
     date_format: "%Y-%m-%d"
-    logged_in_marker: "TODO-verify: [data-testid='header-profile']"
-    login_wall_selectors: ["TODO: sign-in modal selector"]
-    captcha_selectors: ["TODO: captcha frame selector"]
+    logged_in_marker: null     # the quick scan is logged out (Genius prices not tracked)
+    login_wall_selectors: []
+    captcha_selectors: []      # CAPTCHA / block pages are still caught by their text
     block_texts: []
+    wait_for: "TODO-verify: tr.js-rt-block-row"   # wait until room rows are there
     room_template:
-      search_price: "TODO-verify: .hprt-table tr:has(.hprt-roomtype-link:has-text('{room}')) .bui-price-display__value"
-      # NO CLICKS. Booking.com's room table already shows the price AND
-      # "+ Rs N taxes and charges" (and Genius prices when logged in), so the
-      # deep check reads them right there: no room-count dropdown, no Reserve.
-      steps: []
-      summary:
-        ready: "TODO-verify: .hprt-table"
-        room_name: "TODO-verify: .hprt-table tr:has(.hprt-roomtype-link:has-text('{room}')) .hprt-roomtype-link"
-        meal_plan: "TODO-verify: .hprt-table tr:has(.hprt-roomtype-link:has-text('{room}')) .hprt-conditions"
-        cancellation: "TODO-verify: .hprt-table tr:has(.hprt-roomtype-link:has-text('{room}')) [data-testid='cancellation-policy']"
-        room_price: "TODO-verify: .hprt-table tr:has(.hprt-roomtype-link:has-text('{room}')) .bui-price-display__value"
-        gst: "TODO-verify: .hprt-table tr:has(.hprt-roomtype-link:has-text('{room}')) [data-testid='prd-taxes-and-fees-under-price']"
-        fees: null
-        discount: null
-        final: null   # table shows no total: final = room price + taxes, both read from the page
+      # Same method as MakeMyTrip: one row per room, price AND taxes in its text,
+      # so the final is known from one page load and nothing is clicked.
+      # Row text seen 9 Oct 2026 (stay 10 Oct, Firecrawl snapshot from India):
+      #   Deluxe Room ... Current price Rs 3,400 ... Total Rs 3,400.32 +Rs 193 taxes and fees
+      # Tested 5/5 rooms on that snapshot (docs/site-findings.md). The tax is a CLASS
+      # (.prd-taxes-and-fees-under-price), not a data-testid, and .hprt-conditions
+      # does not exist: the older summary selectors never matched.
+      # Confirm once on the office PC: python -m rate_parity check --site booking_com --days 1
+      # then delete the two "TODO-verify: " prefixes (wait_for and container).
+      price_text:
+        container: "TODO-verify: tr.js-rt-block-row:has(.hprt-roomtype-link:has-text('{room}'))"
+        pattern: "₹\\s*(?P<price>[\\d,]+(?:\\.\\d{1,2})?)\\s*\\+\\s*₹\\s*(?P<tax>[\\d,]+)\\s*taxes\\s+and\\s+(?:fees|charges)"
     # Room matches confirmed by Keekoo on 2026-10-08 (evidence: docs/site-findings.md).
+    # "Deluxe Room" does not match "Deluxe Double Room" (checked: 1 row each).
     rooms:
       standard_garden:
-        labels: {room: "Deluxe Room", meal_plan: "TODO-verify", cancellation: "Free cancellation"}
+        labels: {room: "Deluxe Room", meal_plan: "Room only", cancellation: "Free cancellation"}
       deluxe_valley:
-        labels: {room: "Deluxe Double Room", meal_plan: "TODO-verify", cancellation: "Free cancellation"}
+        labels: {room: "Deluxe Double Room", meal_plan: "Room only", cancellation: "Free cancellation"}
       deluxe_mountain:
-        labels: {room: "Double Room with Mountain View", meal_plan: "TODO-verify", cancellation: "Free cancellation"}
+        labels: {room: "Double Room with Mountain View", meal_plan: "Room only", cancellation: "Free cancellation"}
       family_suite:
-        labels: {room: "Superior Family Room", meal_plan: "TODO-verify", cancellation: "Free cancellation"}
+        labels: {room: "Superior Family Room", meal_plan: "Room only", cancellation: "Free cancellation"}
       premium_cottage:
-        labels: {room: "Superior Chalet", meal_plan: "TODO-verify", cancellation: "Free cancellation"}
+        labels: {room: "Superior Chalet", meal_plan: "Room only", cancellation: "Free cancellation"}
 
   # Enabled: a site with any TODO left is reported "not set up" and is never
   # opened, so the others still run. Verify with: python -m rate_parity check --site <key>

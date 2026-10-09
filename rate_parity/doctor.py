@@ -56,7 +56,7 @@ def check_python(version=sys.version_info) -> Result:
     found = f"{version[0]}.{version[1]}"
     if tuple(version[:2]) >= (3, 10):
         return Result(PASS, "python", f"Python {found}")
-    return Result(FAIL, "python", f"Python {found} is too old", "install Python 3.11 or newer, then re-create .venv")
+    return Result(FAIL, "python", f"Python {found} is too old", "install Python 3.10 or newer, then re-create .venv")
 
 
 def check_packages(importer=importlib.import_module, platform=sys.platform) -> Result:

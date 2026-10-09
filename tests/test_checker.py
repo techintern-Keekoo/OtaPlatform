@@ -1,3 +1,5 @@
+import dataclasses
+
 from rate_parity.checker import candidate, probe, report
 from rate_parity.config import load_config
 from rate_parity.safety import SafePage
@@ -62,10 +64,15 @@ def test_tax_basis_hint_lists_phrases_found_case_insensitive():
 
 def test_candidate_site_drops_unfilled_todos_that_would_break_loading():
     from rate_parity.checker import candidate_site
-    booking = candidate_site(load_config(EXAMPLE, check_placeholders=False).sites["booking_com"])
+    site = load_config(EXAMPLE, check_placeholders=False).sites["booking_com"]
+    site = dataclasses.replace(site, captcha_selectors=("TODO: captcha frame selector",),
+                               login_wall_selectors=("TODO: sign-in modal selector",),
+                               logged_in_marker="TODO-verify: [data-testid='header-profile']")
+    booking = candidate_site(site)
     assert booking.captcha_selectors == () and booking.login_wall_selectors == ()
     assert booking.logged_in_marker == "[data-testid='header-profile']"
-    assert booking.rooms["standard_garden"].search_price.startswith(".hprt-table tr:has(")
+    assert booking.wait_for == "tr.js-rt-block-row"
+    assert booking.rooms["standard_garden"].price_text[0].startswith("tr.js-rt-block-row:has(")
 
 
 def test_run_config_still_refuses_candidates():

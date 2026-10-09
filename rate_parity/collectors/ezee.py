@@ -70,7 +70,7 @@ class EzeeCollector(Collector):
             gst=_money(plan["TaxRate"]),
             login_state="guest",
             screenshot_path=self._evidence.get(stay, ""),
-            notes=[f"website plan: {plan.get('Room_Name', '?')}"],
+            notes=[_plan_note(plan)],
         )
 
     # --- internals ---------------------------------------------------------
@@ -125,6 +125,14 @@ class EzeeCollector(Collector):
         path = self._evidence_dir / f"website_{stay.checkin.isoformat()}_{stamp}.html"
         path.write_text(html, encoding="utf-8")
         return str(path)
+
+
+def _plan_note(plan: dict) -> str:
+    """Plan name plus the room description, which ends in the meal plan (live, 9 Oct 2026:
+    "Standard garden view room EP", EP = room only), so a person can audit like-for-like."""
+    description = " ".join(str(plan.get("Room_Description") or "").split())
+    name = f"website plan: {plan.get('Room_Name', '?')}"
+    return f"{name} ({description})" if description else name
 
 
 def _parse_records(html: str) -> list[dict]:

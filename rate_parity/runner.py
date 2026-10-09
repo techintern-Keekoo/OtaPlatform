@@ -82,19 +82,22 @@ class StayCheck:
         return self._web_summaries[room_id]
 
     def check_ota(self, ota: Site) -> list[CheckRow]:
-        loaded = False
+        loaded = sold_out = False
         if not ota.ready:
             prices, note = None, "not set up yet (selectors still TODO in config)"
             self._offers, self._taxes, self._evidence = {}, {}, ""
         else:
             result, note = _attempt(self.quick, ota, lambda c, p: (
                 c.quick_scan(p, self.stay), getattr(c, "offer_types", {}),
-                getattr(c, "card_taxes", {}), getattr(c, "evidence", "")))
+                getattr(c, "card_taxes", {}), getattr(c, "evidence", ""), getattr(c, "page_says_sold_out", False)))
             loaded = result is not None
-            prices, self._offers, self._taxes, self._evidence = result if result else (None, {}, {}, "")
+            prices, self._offers, self._taxes, self._evidence, sold_out = result if result else (None, {}, {}, "", False)
         rows = [self._check_room(ota, room_id, prices, note) for room_id in ota.rooms]
         if loaded and rows and not any((prices or {}).get(room_id) is not None for room_id in ota.rooms):
-            _mark_site_broken(rows, ota)
+            if sold_out:
+                log.info("%s: no price and the page says sold out: treated as a full house", ota.label)
+            else:
+                _mark_site_broken(rows, ota)
         return rows
 
     _offers: dict = {}

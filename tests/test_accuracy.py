@@ -106,7 +106,7 @@ def test_sanity_values_are_read_as_decimal():
 @pytest.mark.parametrize("sanity", [
     {"min_ratio": 1.2}, {"min_ratio": 0}, {"max_ratio": 0.9}, {"max_ratio": 1},
     {"max_tax_pct": 0}, {"max_tax_pct": 150}, {"min_ratio": True}, {"min_ratio": "0.4"},
-    {"max_ratio_pct": 3}, "strict",
+    {"max_ratio_pct": 3}, "strict", {"min_ratio": float("nan")}, {"max_ratio": float("inf")},
 ])
 def test_bad_sanity_values_are_refused(sanity):
     with pytest.raises(ConfigError, match="sanity"):
@@ -293,3 +293,44 @@ def test_goibibo_candidate_mirrors_makemytrip():
         assert goibibo.rooms[room_id].price_text == room.price_text
         assert goibibo.rooms[room_id].labels == room.labels
     assert "mmtId=202004271355036572" in goibibo.search_url
+
+
+# --- Booking.com candidate, checked against the live page text of 9 Oct 2026 ------
+
+# Row text (inner_text) of the Booking.com room table for 10 Oct 2026, 2 adults,
+# from a Firecrawl snapshot taken from India. One row per room.
+BOOKING_ROWS = {
+    "standard_garden": ("Deluxe Room 200 m² • 1 room Sleeps: 2 adults 1 queen bed Garden view Private bathroom "
+                        "Free Wifi ₹ 3,864 ₹ 3,400 Original price ₹ 3,864 Current price ₹ 3,400 ₹ 3,864 × 1 night "
+                        "₹ 3,864 Booking.com pays - ₹ 463.68 Total ₹ 3,400.32 +₹ 193 taxes and fees 12% off "
+                        "Non-refundable", D("3400.32"), D("193")),
+    "family_suite": ("Superior Family Room 220 m² • 1 room Sleeps: 2 adults ₹ 7,487 ₹ 6,589 Original price ₹ 7,487 "
+                     "Current price ₹ 6,589 Total ₹ 6,588.56 +₹ 374 taxes and fees Non-refundable",
+                     D("6588.56"), D("374")),
+    # With CSS on, the hidden "Total" line may be left out of inner_text: the shown price is used.
+    "deluxe_valley": ("Deluxe Double Room ₹ 4,468 ₹ 3,932 +₹ 223 taxes and fees", D("3932"), D("223")),
+}
+
+
+class RowPage:
+    def __init__(self, text):
+        self.text = text
+
+    def read_text(self, selector):
+        return self.text
+
+
+def test_booking_is_not_set_up_until_the_office_pc_check():
+    cfg = load_config(EXAMPLE)
+    assert cfg.sites["booking_com"].enabled and not cfg.sites["booking_com"].ready
+
+
+@pytest.mark.parametrize("room_id", list(BOOKING_ROWS))
+def test_booking_candidate_reads_price_and_taxes_from_the_room_row(room_id):
+    from rate_parity.checker import candidate_site
+    from rate_parity.collectors.generic import read_price_text
+    site = candidate_site(load_config(EXAMPLE, check_placeholders=False).sites["booking_com"])
+    room = site.rooms[room_id]
+    text, price, tax = BOOKING_ROWS[room_id]
+    assert room.price_text[0].startswith("tr.js-rt-block-row:has(.hprt-roomtype-link:has-text(")
+    assert read_price_text(RowPage(text), room.price_text) == (price, tax, "non-refundable" if "Non-ref" in text else "")
