@@ -165,11 +165,16 @@ sites:
       # Tested 5/5 rooms on that snapshot (docs/site-findings.md). The tax is a CLASS
       # (.prd-taxes-and-fees-under-price), not a data-testid, and .hprt-conditions
       # does not exist: the older summary selectors never matched.
+      # Office PC, 9 Oct (logged out): "Current price Rs 3,060 / Sign in for this
+      # members-only price / +Rs 174 taxes and charges", and "Applied to the price
+      # before taxes and charges" (= before tax, like Zen). So up to 80 characters of
+      # words (no digits, no Rs) may sit between price and tax. The members-only price
+      # is the LOWER one, which is the safe one to hold against Zen.
       # Confirm once on the office PC: python -m rate_parity check --site booking_com --days 1
       # then delete the two "TODO-verify: " prefixes (wait_for and container).
       price_text:
         container: "TODO-verify: tr.js-rt-block-row:has(.hprt-roomtype-link:has-text('{room}'))"
-        pattern: "₹\\s*(?P<price>[\\d,]+(?:\\.\\d{1,2})?)\\s*\\+\\s*₹\\s*(?P<tax>[\\d,]+)\\s*taxes\\s+and\\s+(?:fees|charges)"
+        pattern: "₹\\s*(?P<price>[\\d,]+(?:\\.\\d{1,2})?)[^₹\\d]{0,80}?\\+\\s*₹\\s*(?P<tax>[\\d,]+)\\s*taxes\\s+and\\s+(?:fees|charges)"
     # Room matches confirmed by Keekoo on 2026-10-08 (evidence: docs/site-findings.md).
     # "Deluxe Room" does not match "Deluxe Double Room" (checked: 1 row each).
     rooms:

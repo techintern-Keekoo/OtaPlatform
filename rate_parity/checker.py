@@ -25,7 +25,7 @@ _MARKER = re.compile(re.escape(PREFIX) + r"\s*")
 # Words OTAs use to say whether a price includes tax. Shown by the checker so a
 # human can set price_includes_tax for the site (Agoda: "before taxes & fees", seen 9 Oct 2026).
 TAX_BASIS_PHRASES = ("incl. taxes", "including taxes", "excl. taxes", "excluding taxes", "+ taxes",
-                     "taxes and fees", "taxes & fees", "price per night")
+                     "taxes and fees", "taxes & fees", "taxes and charges", "before taxes", "price per night")
 
 
 def candidate(selector: str | None) -> str | None:

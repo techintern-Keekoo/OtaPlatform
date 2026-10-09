@@ -309,6 +309,14 @@ BOOKING_ROWS = {
                      D("6588.56"), D("374")),
     # With CSS on, the hidden "Total" line may be left out of inner_text: the shown price is used.
     "deluxe_valley": ("Deluxe Double Room ₹ 4,468 ₹ 3,932 +₹ 223 taxes and fees", D("3932"), D("223")),
+    # Office PC, real Chrome, logged out, 9 Oct: a members-only line sits between price and tax.
+    "deluxe_mountain": ("Deluxe Room\nSleeps: 2 adults\n1 large double bed\nRoom\n200 m²\nGarden view\n"
+                        "Free WiFi\nCompare\n₹ 3,864\n₹ 3,060 \nOriginal price ₹ 3,864 Current price ₹ 3,060\n"
+                        "Sign in for this members-only price\n+₹ 174 taxes and charges\n21% off\n"
+                        "Includes 1 parking spot + high-speed internet\nNon-refundable\n1 (₹ 3,060)\n2 (₹ 6,121)",
+                        D("3060"), D("174")),
+    "family_suite_office": ("₹ 6,641\n₹ 5,260 \nOriginal price ₹ 6,641 Current price ₹ 5,260\n"
+                            "+₹ 299 taxes and charges\n1 (₹ 5,260)", D("5260"), D("299")),
 }
 
 
@@ -330,7 +338,17 @@ def test_booking_candidate_reads_price_and_taxes_from_the_room_row(room_id):
     from rate_parity.checker import candidate_site
     from rate_parity.collectors.generic import read_price_text
     site = candidate_site(load_config(EXAMPLE, check_placeholders=False).sites["booking_com"])
-    room = site.rooms[room_id]
+    room = site.rooms[room_id.replace("_office", "")]
     text, price, tax = BOOKING_ROWS[room_id]
     assert room.price_text[0].startswith("tr.js-rt-block-row:has(.hprt-roomtype-link:has-text(")
     assert read_price_text(RowPage(text), room.price_text) == (price, tax, "non-refundable" if "Non-ref" in text else "")
+
+
+def test_booking_pattern_never_jumps_over_another_price():
+    # Words may sit between price and tax, numbers may not: "₹ 3,864" (the old price)
+    # must never be paired with a tax that belongs to a later price.
+    from rate_parity.checker import candidate_site
+    from rate_parity.collectors.generic import read_price_text
+    site = candidate_site(load_config(EXAMPLE, check_placeholders=False).sites["booking_com"])
+    text = "₹ 3,864 was 21% off then ₹ 3,060 Sign in for this members-only price +₹ 174 taxes and charges"
+    assert read_price_text(RowPage(text), site.rooms["standard_garden"].price_text)[:2] == (D("3060"), D("174"))
