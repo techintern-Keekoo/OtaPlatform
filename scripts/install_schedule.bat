@@ -8,4 +8,5 @@ schtasks /Create /F /SC DAILY /ST 22:00 /TN "Keekoo OTA Parity 10PM" /TR "\"%RUN
 echo.
 echo Done. Check them in Task Scheduler (search "Task Scheduler" in the Start menu).
 echo Results: %~dp0..\output   (rate_parity.csv, report_*.txt, agent.log)
+echo Check this PC any time: double-click %~dp0doctor.bat
 pause

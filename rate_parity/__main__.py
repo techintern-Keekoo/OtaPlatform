@@ -3,6 +3,8 @@
     python -m rate_parity run --config config.yaml [--dry-run] [--only booking_com]
     python -m rate_parity login --config config.yaml   # a human logs in to the OTAs
     python -m rate_parity check --config config.yaml --site agoda   # read-only selector check
+    python -m rate_parity doctor --config config.yaml [--offline]  # is this PC ready? (read-only)
+    python -m rate_parity alert-test --config config.yaml [--to 919800000000]  # one WhatsApp test
 """
 from __future__ import annotations
 
@@ -53,10 +55,19 @@ def main(argv: list[str] | None = None) -> int:
     check_cmd.add_argument("--site", required=True, help="site key, e.g. agoda, makemytrip, booking_com, website")
     check_cmd.add_argument("--days", type=int, default=14, help="check-in this many days from today")
     check_cmd.add_argument("--profile", action="store_true", help="use the logged-in agent profile")
+    doctor_cmd = commands.add_parser("doctor", help="read-only: is this PC ready for the scheduled runs?")
+    doctor_cmd.add_argument("--config", required=True)
+    doctor_cmd.add_argument("--offline", action="store_true", help="skip the browser start and the website search")
+    alert_cmd = commands.add_parser("alert-test", help="send one WhatsApp test message through WATI")
+    alert_cmd.add_argument("--config", required=True)
+    alert_cmd.add_argument("--to", help="send only to this number (country code + number, digits only)")
     args = parser.parse_args(argv)
 
     load_dotenv()
     _setup_logging()
+    if args.command == "doctor":  # loads the config itself, so a bad config is one FAIL line
+        from .doctor import doctor
+        return doctor(args.config, offline=args.offline)
     try:
         # login only needs browser settings, so unfilled site TODOs are fine there
         cfg = load_config(args.config, check_placeholders=(args.command == "run"))
@@ -67,6 +78,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "check":
         from .checker import check_site
         return check_site(cfg, args.site, args.days, args.profile)
+
+    if args.command == "alert-test":
+        from .doctor import alert_test
+        return alert_test(cfg, to=args.to)
 
     if args.command == "login":
         from .browser import manual_login
