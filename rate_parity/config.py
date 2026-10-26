@@ -120,6 +120,7 @@ class Config:
     alert_include_could_not_check: bool
     alert_max_chars: int
     sanity: SanityLimits = SanityLimits()  # misread guard: see compare.implausible_reason
+    keep_evidence_days: int = 30  # screenshots/page copies older than this are deleted; 0 = keep all
 
     @property
     def website(self) -> Site:
@@ -450,7 +451,15 @@ def parse_config(raw: dict, check_placeholders: bool = True) -> Config:
         alert_include_could_not_check=_get(alerts, "include_could_not_check", "alerts", bool, True),
         alert_max_chars=_get(alerts, "max_chars", "alerts", int, 900),
         sanity=_sanity(raw),
+        keep_evidence_days=_keep_days(output),
     )
+
+
+def _keep_days(output: dict) -> int:
+    days = _get(output, "keep_evidence_days", "output", int, 30)
+    if isinstance(days, bool) or days < 0:
+        raise ConfigError("output.keep_evidence_days must be a whole number of days >= 0 (0 = keep all)")
+    return days
 
 
 def load_config(path: str | Path, check_placeholders: bool = True) -> Config:

@@ -19,7 +19,7 @@ Output: `output\rate_parity.csv` (all rows), `output\report_*.txt` (table), `out
 ## Known issue
 MakeMyTrip night 2 once returned no room list (twice). Now the agent waits 20 s before
 the second try, and if it still fails it saves a screenshot + page text
-(`screenshots\makemytrip_load_failed_<date>_*.png/.txt`) and puts what the page said in the report.
+(`screenshots\makemytrip_load_failed_<date>_*.jpg/.txt`) and puts what the page said in the report.
 Next step: read that text - sold out, blocked, or slow page - and adjust.
 
 ## Commands (office PC, `C:\otaPlatform\OtaPlatform`, venv active)

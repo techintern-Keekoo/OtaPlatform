@@ -103,6 +103,8 @@ Runs 3 times a day: **10:00, 18:00 and 22:00** (the PC's clock, keep it on IST).
 2. Double-click `scripts\install_schedule.bat`. It creates 3 Windows Task Scheduler tasks.
 3. The PC must be on and you must be logged in at those times. The OTA check uses a visible Chrome window.
 4. Results go to `output\`: `rate_parity.csv` (every check), `report_*.txt` (the price table per run) and `agent.log`.
+   Screenshots are saved as JPEG in `screenshots\` and deleted after 30 days (`output.keep_evidence_days`, 0 = keep all).
+   If a new version changes the CSV columns, the old file is renamed `rate_parity_old_columns_<time>.csv` and a fresh one is started.
 5. To stop it, double-click `scripts\uninstall_schedule.bat`.
 
 An OTA that still has `TODO` in the config shows as "not set up" in the table and is never opened, so the website and the ready OTAs keep running. Use `python -m rate_parity check --config config.yaml --site <key>` to verify an OTA's selectors.

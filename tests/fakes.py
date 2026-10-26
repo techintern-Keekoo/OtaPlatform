@@ -1,5 +1,7 @@
 """Fake Playwright-like objects. No browser, no network."""
 
+import os
+
 
 class FakeElement:
     def __init__(self, text="", attrs=None, clickable_ancestor=None):
@@ -100,8 +102,10 @@ class FakePage:
     def wait_for_load_state(self, state=None, timeout=None):
         pass
 
-    def screenshot(self, path=None, full_page=False):
+    def screenshot(self, path=None, full_page=False, type=None, quality=None):
         self.screenshots.append(path)
+        if path and os.path.isdir(os.path.dirname(path)):
+            open(path, "wb").write(b"fake")  # a real screenshot is never empty
 
     def close(self):
         self.closed = True

@@ -160,8 +160,20 @@ class SafePage:
         self._screenshot_dir.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         safe_name = re.sub(r"[^A-Za-z0-9_.-]", "_", f"{self._site}_{name}_{stamp}")
-        path = self._screenshot_dir / f"{safe_name}.png"
-        self._page.screenshot(path=str(path), full_page=True)
+        # JPEG: about 6x smaller than PNG (tested), still readable as evidence.
+        # JPEG cannot be taller than 65,535 px: Chrome then writes an EMPTY file
+        # without an error (tested), so an empty or failed JPEG falls back to PNG.
+        path = self._screenshot_dir / f"{safe_name}.jpg"
+        try:
+            self._page.screenshot(path=str(path), full_page=True, type="jpeg", quality=70)
+            saved = path.exists() and path.stat().st_size > 0
+        except Exception as exc:
+            log.info("%s: JPEG screenshot failed (%s)", self._site, type(exc).__name__)
+            saved = False
+        if not saved:
+            path.unlink(missing_ok=True)
+            path = path.with_suffix(".png")
+            self._page.screenshot(path=str(path), full_page=True)
         return str(path)
 
     def click_step(self, selector: str) -> None:

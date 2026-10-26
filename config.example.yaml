@@ -100,6 +100,9 @@ network:
 
 output:
   screenshot_dir: screenshots
+  # Screenshots and page copies older than this many days are deleted at the
+  # start of each run (only files the agent wrote). 0 = keep everything.
+  keep_evidence_days: 30
   csv_path: output/rate_parity.csv
   sheet_worksheet: checks
 

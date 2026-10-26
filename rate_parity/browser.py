@@ -17,6 +17,10 @@ _COMMON = {
     "timezone_id": "Asia/Kolkata",
 }
 
+# Sites already opened in this process (one CLI run = one process). The polite
+# pause is for repeat visits to the SAME site; the first visit of a run skips it.
+_visited_sites: set[str] = set()
+
 
 class GuardedContext:
     def __init__(self, context, cfg: Config, login_state: str, closers: list):
@@ -36,14 +40,17 @@ class GuardedContext:
             allowed_steps=site.step_selectors(),
             screenshot_dir=self.cfg.screenshot_dir,
             timeout_ms=self.cfg.browser.timeout_ms,
-            pause=self._pause,
+            pause=lambda: self._pause(site.key),
         )
 
     def open_page_for_human(self):
         """Raw page for manual login only. Collectors never get this."""
         return self._context.new_page()
 
-    def _pause(self) -> None:
+    def _pause(self, site_key: str) -> None:
+        if site_key not in _visited_sites:  # first visit to this site in this run: no wait needed
+            _visited_sites.add(site_key)
+            return
         low, high = self.cfg.browser.delay_seconds
         time.sleep(random.uniform(low, high))
 

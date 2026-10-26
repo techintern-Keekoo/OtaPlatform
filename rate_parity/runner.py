@@ -6,6 +6,8 @@ and the run carries on.
 from __future__ import annotations
 
 import logging
+import re
+import time
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -224,8 +226,36 @@ class NoBrowser:
         raise RuntimeError(f"{site.key} needs a browser but none was opened")
 
 
+# Only files this agent writes: <name>_YYYYMMDD-HHMMSS.<ext>. Anything else in the folder is never touched.
+_EVIDENCE_FILE = re.compile(r"_\d{8}-\d{6}\.(?:png|jpg|html|txt)$")
+
+
+def clean_old_evidence(folder, keep_days: int, now: float | None = None) -> int:
+    """Delete this agent's screenshots / page copies older than keep_days (0 = keep all).
+    Without this the folder grows by ~20 MB a day. Returns how many were deleted."""
+    if keep_days <= 0:
+        return 0
+    cutoff = (now or time.time()) - keep_days * 86400
+    deleted = 0
+    try:
+        files = [f for f in folder.iterdir() if f.is_file() and _EVIDENCE_FILE.search(f.name)]
+    except OSError:  # folder missing or unreadable: nothing to clean
+        return 0
+    for file in files:
+        try:
+            if file.stat().st_mtime < cutoff:
+                file.unlink()
+                deleted += 1
+        except OSError as exc:  # e.g. open in an image viewer: try again next run
+            log.warning("could not delete old evidence %s: %s", file.name, exc)
+    if deleted:
+        log.info("deleted %d evidence files older than %d days from %s", deleted, keep_days, folder)
+    return deleted
+
+
 def run(cfg: Config, only: str | None = None, dry_run: bool = False) -> list[CheckRow]:
     otas = cfg.otas(only)  # validate --only before opening a browser
+    clean_old_evidence(cfg.screenshot_dir, cfg.keep_evidence_days)
     if not any(site.ready for site in otas) and cfg.website.kind == "ezee":
         log.info("no OTA is set up yet: checking the website only, no browser")
         rows = check_all(cfg, NoBrowser(), NoBrowser(), only)
